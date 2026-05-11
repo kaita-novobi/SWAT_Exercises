@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+        Scheduled Action: Daily Pending Quotations
+        Runs every day at 22:00 (10 PM) and calls
+        SaleOrder._cron_send_pending_quotation_reminder(), which sends one
+        consolidated reminder email per salesperson for all their pending
+        (draft/sent) quotations.
+    -->
+    <record id="ir_cron_daily_pending_quotations" model="ir.cron">
+        <field name="name">Daily Pending Quotations</field>
+        <field name="model_id" ref="sale.model_sale_order"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_send_pending_quotation_reminder()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <!-- <field name="numbercall">-1</field>  -->
+        <field name="active">True</field>
+        <!-- Next call: today at 22:00 UTC. Odoo advances this by 1 day after each execution. -->
+        <!-- <field name="nextcall">2026-04-12 22:00:00</field> -->
+    </record>
+</odoo>

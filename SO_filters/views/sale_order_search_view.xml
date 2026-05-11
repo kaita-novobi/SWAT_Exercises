@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="sale_order_view_search_so_filters" model="ir.ui.view">
+        <field name="name">sale.order.search.so.filters</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.sale_order_view_search_inherit_quotation"/>
+        <field name="arch" type="xml">
+
+            <!-- ============================================================
+                 FILTERS: append all custom filter groups at the end of
+                 the existing <search> element.
+            ============================================================ -->
+            <xpath expr="//search" position="inside">
+
+                <!-- ── Group 1: Basic businesses ─────────────────────────── -->
+                <separator/>
+                <filter
+                    name="so_my_quotations"
+                    string="My Quotations"
+                    domain="[('user_id', '=', uid)]"/>
+                <filter
+                    name="so_my_team_quotations"
+                    string="My Team Quotations"
+                    domain="[('team_id.member_ids', 'in', [uid])]"/>
+                <filter
+                    name="so_unassigned_quotations"
+                    string="Unassigned Quotations"
+                    domain="[('user_id', '=', False)]"/>
+                <filter
+                    name="so_no_delivery_method"
+                    string="No Delivery Method"
+                    domain="[('carrier_id', '=', False)]"/>
+                <filter
+                    name="so_to_follow_up"
+                    string="To Follow Up"
+                    domain="[('state', '=', 'sent')]"/>
+                <filter
+                    name="so_high_value"
+                    string="High Value Quotations"
+                    domain="[('amount_untaxed', '&gt;', 1000)]"/>
+
+                <!-- ── Group 2: Follow-up and Urgency ─────────────────────── -->
+                <separator/>
+                <filter
+                    name="so_expired"
+                    string="Expired Quotations"
+                    domain="[('validity_date', '&lt;', context_today().strftime('%Y-%m-%d')), ('state', 'in', ['draft', 'sent'])]"/>
+                <filter
+                    name="so_expiring_3days"
+                    string="Expiring in 3 Days"
+                    domain="[('validity_date', '&gt;=', context_today().strftime('%Y-%m-%d')), ('validity_date', '&lt;=', (context_today() + datetime.timedelta(days=3)).strftime('%Y-%m-%d'))]"/>
+                <filter
+                    name="so_no_activity"
+                    string="No Scheduled Activity"
+                    domain="[('activity_ids', '=', False)]"/>
+                <filter
+                    name="so_overdue_activity"
+                    string="Overdue Activity"
+                    domain="[('activity_ids.date_deadline', '&lt;', context_today().strftime('%Y-%m-%d'))]"/>
+                <filter
+                    name="so_sent_7days_ago"
+                    string="Sent More Than 7 Days Ago"
+                    domain="[('state', '=', 'sent'), ('create_date', '&lt;=', (context_today() - datetime.timedelta(days=7)).strftime('%Y-%m-%d'))]"/>
+
+                <!-- ── Group 3: Missing Info SO ────────────────────────────── -->
+                <separator/>
+                <filter
+                    name="so_missing_email"
+                    string="Missing Customer Email"
+                    domain="[('partner_id.email', '=', False)]"/>
+                <filter
+                    name="so_missing_phone"
+                    string="Missing Customer Phone"
+                    domain="[('partner_id.phone', '=', False)]"/>
+                <filter
+                    name="so_missing_salesperson"
+                    string="Missing Salesperson"
+                    domain="[('user_id', '=', False)]"/>
+                <filter
+                    name="so_missing_payment_term"
+                    string="Missing Payment Term"
+                    domain="[('payment_term_id', '=', False)]"/>
+
+                <!-- ── Group 4: Priority and Type ─────────────────────────── -->
+                <separator/>
+                <filter
+                    name="so_very_high_value"
+                    string="Very High Value Quotations"
+                    domain="[('amount_untaxed', '&gt;', 5000)]"/>
+                <filter
+                    name="so_international"
+                    string="International Customers"
+                    domain="[('is_international', '=', True)]"/>
+                <filter
+                    name="so_company_customers"
+                    string="Company Customers Only"
+                    domain="[('partner_id.is_company', '=', True)]"/>
+
+            </xpath>
+
+            <!-- ============================================================
+                 GROUP BY: append Status and Validity Date by Month to the
+                 existing <group> element (base view already provides
+                 Salesperson, Sales Team, Customer, Order Date by Month).
+            ============================================================ -->
+            <xpath expr="//group" position="inside">
+                <filter
+                    name="group_by_state"
+                    string="Status"
+                    context="{'group_by': 'state'}"/>
+                <filter
+                    name="group_by_validity_date"
+                    string="Validity Date by Month"
+                    context="{'group_by': 'validity_date:month'}"/>
+            </xpath>
+
+        </field>
+    </record>
+</odoo>
