@@ -48,7 +48,7 @@
                 <filter
                     name="so_expiring_3days"
                     string="Expiring in 3 Days"
-                    domain="[('validity_date', '&gt;=', context_today().strftime('%Y-%m-%d')), ('validity_date', '&lt;=', (context_today() + datetime.timedelta(days=3)).strftime('%Y-%m-%d'))]"/>
+                    domain="[('validity_date', '&gt;=', context_today().strftime('%Y-%m-%d')), ('validity_date', '=', (context_today() + datetime.timedelta(days=3)).strftime('%Y-%m-%d'))]"/>
                 <filter
                     name="so_no_activity"
                     string="No Scheduled Activity"
