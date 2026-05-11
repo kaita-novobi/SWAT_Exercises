@@ -19,15 +19,9 @@ class SaleDeliveryConfirmWizard(models.TransientModel):
     # ---------------------------------------------------------------------------
 
     def action_add_delivery(self):
-        """Close the wizard and return the user to the Sales Order form without confirming."""
+        """Close this wizard and open the delivery method wizard on the current Sales Order."""
         self.ensure_one()
-        return {
-            "type": "ir.actions.act_window",
-            "res_model": "sale.order",
-            "res_id": self.sale_order_id.id,
-            "view_mode": "form",
-            "target": "current",
-        }
+        return self.sale_order_id.action_open_delivery_wizard()
 
     def action_confirm_without_delivery(self):
         """Confirm the Sales Order, bypassing the delivery method check."""
