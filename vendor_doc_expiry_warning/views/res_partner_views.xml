@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_partner_form_document_tracking" model="ir.ui.view">
+        <field name="name">res.partner.form.document.tracking</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_form"/>
+        <field name="arch" type="xml">
+            <notebook position="inside">
+                <page name="document_tracking" string="Document Tracking">
+                    <group>
+                        <group string="W-9">
+                            <field name="w9_needed"/>
+                            <field name="w9_expiration_date"
+                                   invisible="not w9_needed"/>
+                        </group>
+                        <group string="COI">
+                            <field name="coi_needed"/>
+                            <field name="coi_expiration_date"
+                                   invisible="not coi_needed"/>
+                        </group>
+                    </group>
+                    <group>
+                        <field name="followup_responsible_id"/>
+                        <field name="is_document_expiring_soon" readonly="1"/>
+                    </group>
+                </page>
+            </notebook>
+        </field>
+    </record>
+</odoo>

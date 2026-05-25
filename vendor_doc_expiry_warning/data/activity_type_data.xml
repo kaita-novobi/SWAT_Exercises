@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="activity_type_document_expiration_followup" model="mail.activity.type">
+        <field name="name">Document Expiration Follow-Up</field>
+        <field name="icon">fa-file-text-o</field>
+        <field name="category">default</field>
+        <field name="delay_count">0</field>
+        <field name="delay_unit">days</field>
+        <field name="delay_from">current_date</field>
+        <field name="chaining_type">suggest</field>
+    </record>
+</odoo>
