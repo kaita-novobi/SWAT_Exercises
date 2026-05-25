@@ -1,6 +1,6 @@
 {
     "name": "SO Filters",
-    "version": "19.0.1.0.1",
+    "version": "19.0.1.0.2",
     "summary": "Advanced search filters and group-by options for the quotation list view.",
     "category": "Sales",
     "author": "NOVOBI",
