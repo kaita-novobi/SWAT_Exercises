@@ -11,6 +11,7 @@
     "depends": ["base", "mail", "purchase"],
     "data": [
         "data/activity_type_data.xml",
+        "data/mail_template_data.xml",
         "data/ir_cron_data.xml",
         "views/res_partner_views.xml",
     ],

@@ -293,11 +293,27 @@ class ResPartner(models.Model):
             ),
         )
 
+        template = self.env.ref(
+            "vendor_doc_expiry_warning.email_template_vendor_expiry_summary",
+            raise_if_not_found=False,
+        )
+        if not template:
+            _logger.error(
+                "Vendor Doc Expiry Weekly Summary: email template "
+                "'vendor_doc_expiry_warning.email_template_vendor_expiry_summary' "
+                "not found — email skipped."
+            )
+            return
+
         rows = ""
         for vendor in sorted_vendors:
             w9_date = vendor.w9_expiration_date if vendor.w9_needed else "N/A"
             coi_date = vendor.coi_expiration_date if vendor.coi_needed else "N/A"
-            responsible = vendor.followup_responsible_id.name if vendor.followup_responsible_id else "—"
+            responsible = (
+                vendor.followup_responsible_id.name
+                if vendor.followup_responsible_id
+                else "—"
+            )
             rows += (
                 f"<tr>"
                 f"<td style='padding:4px 8px;border:1px solid #ccc'>{vendor.name}</td>"
@@ -307,10 +323,7 @@ class ResPartner(models.Model):
                 f"</tr>"
             )
 
-        body_html = (
-            f"<p>Dear Purchase Manager,</p>"
-            f"<p>The following vendors have W-9 or COI documents expiring within the next "
-            f"{_EXPIRY_WARNING_DAYS} days (as of {today}):</p>"
+        expiry_table = (
             f"<table style='border-collapse:collapse;font-size:14px'>"
             f"<thead><tr>"
             f"<th style='padding:4px 8px;border:1px solid #ccc;background:#f0f0f0'>Vendor</th>"
@@ -320,13 +333,20 @@ class ResPartner(models.Model):
             f"</tr></thead>"
             f"<tbody>{rows}</tbody>"
             f"</table>"
-            f"<p>Please follow up with these vendors to obtain renewed documentation "
-            f"before their current documents expire.</p>"
         )
 
-        recipient_emails = ", ".join(
-            u.email for u in recipients if u.email
-        )
+        company = self.env.company
+        rendered_body = template._render_field(
+            "body_html",
+            [company.id],
+            add_context={"expiry_table": expiry_table},
+        )[company.id]
+        rendered_subject = template._render_field(
+            "subject",
+            [company.id],
+        )[company.id]
+
+        recipient_emails = ", ".join(u.email for u in recipients if u.email)
         if not recipient_emails:
             _logger.warning(
                 "Vendor Doc Expiry Weekly Summary: no recipient email addresses found — "
@@ -335,9 +355,9 @@ class ResPartner(models.Model):
             return
 
         mail = self.env["mail.mail"].sudo().create({
-            "subject": f"Weekly Vendor Document Expiration Summary — {today}",
+            "subject": rendered_subject,
             "email_to": recipient_emails,
-            "body_html": body_html,
+            "body_html": rendered_body,
             "auto_delete": True,
         })
         mail.send()
