@@ -23,7 +23,7 @@
             <p>The following vendors at <strong>${object.name}</strong> have W-9 or COI
             documents expiring within the next 30 days. Please follow up to ensure
             renewal before the expiration date.</p>
-            ${expiry_table}
+            <div>${expiry_table}</div>
             <p>This is an automated message. Do not reply directly to this email.</p>
         </field>
         <field name="auto_delete">False</field>
