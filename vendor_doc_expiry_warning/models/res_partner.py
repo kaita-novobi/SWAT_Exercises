@@ -267,9 +267,11 @@ class ResPartner(models.Model):
             )
             return
 
-        recipients = purchase_manager_group.users.filtered(
-            lambda u: u.active and u.share is False
-        )
+        recipients = self.env["res.users"].sudo().search([
+            ("active", "=", True),
+            ("share", "=", False),
+            ("group_ids", "in", [purchase_manager_group.id]),
+        ])
         if not recipients:
             _logger.warning(
                 "Vendor Doc Expiry Weekly Summary: no active internal users in "
