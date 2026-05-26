@@ -20,10 +20,10 @@
         <field name="subject">Weekly Vendor Document Expiration Summary — ${object.name}</field>
         <field name="body_html" type="html">
             <p>Dear Purchase Manager,</p>
-            <p>The following vendors at <strong>${object.name}</strong> have W-9 or COI
+            <p>The following vendors at <strong><t t-out="object.name"></t></strong> have W-9 or COI
             documents expiring within the next 30 days. Please follow up to ensure
             renewal before the expiration date.</p>
-            ${expiry_table}
+            <t t-out="expiry_table"></t>
             <p>This is an automated message. Do not reply directly to this email.</p>
         </field>
         <field name="auto_delete">False</field>
