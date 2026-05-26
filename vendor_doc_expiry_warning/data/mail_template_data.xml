@@ -8,10 +8,11 @@
         Search for: "Vendor Document Expiration Weekly Summary"
 
         Body variables available to template editors:
-            ${object.name}   — company name
-            ${expiry_table}  — HTML table of expiring vendors (injected by the weekly cron)
+            object.name    — company name (QWeb: t-out="object.name")
+            expiry_table   — HTML table of expiring vendors (injected by the weekly cron
+                             via add_context; QWeb: t-out="expiry_table")
 
-        Do NOT remove ${expiry_table} from the body — the cron injects the vendor
+        Do NOT remove the expiry_table block from the body — the cron injects the vendor
         data there at render time.
     -->
     <record id="email_template_vendor_expiry_summary" model="mail.template">
@@ -23,7 +24,7 @@
             <p>The following vendors at <strong><t t-out="object.name"></t></strong> have W-9 or COI
             documents expiring within the next 30 days. Please follow up to ensure
             renewal before the expiration date.</p>
-            <div>${expiry_table}</div>
+            <div t-if="expiry_table"><t t-out="expiry_table"/></div>
             <p>This is an automated message. Do not reply directly to this email.</p>
         </field>
         <field name="auto_delete">False</field>

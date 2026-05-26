@@ -1,6 +1,8 @@
 import logging
 from datetime import date, timedelta
 
+from markupsafe import Markup, escape
+
 from odoo import api, fields, models
 
 _logger = logging.getLogger(__name__)
@@ -316,10 +318,10 @@ class ResPartner(models.Model):
             )
             rows += (
                 f"<tr>"
-                f"<td style='padding:4px 8px;border:1px solid #ccc'>{vendor.name}</td>"
+                f"<td style='padding:4px 8px;border:1px solid #ccc'>{escape(vendor.name)}</td>"
                 f"<td style='padding:4px 8px;border:1px solid #ccc'>{w9_date}</td>"
                 f"<td style='padding:4px 8px;border:1px solid #ccc'>{coi_date}</td>"
-                f"<td style='padding:4px 8px;border:1px solid #ccc'>{responsible}</td>"
+                f"<td style='padding:4px 8px;border:1px solid #ccc'>{escape(responsible)}</td>"
                 f"</tr>"
             )
 
@@ -339,7 +341,7 @@ class ResPartner(models.Model):
         rendered_body = template._render_field(
             "body_html",
             [company.id],
-            add_context={"expiry_table": expiry_table},
+            add_context={"expiry_table": Markup(expiry_table)},
         )[company.id]
         rendered_subject = template._render_field(
             "subject",
@@ -358,7 +360,7 @@ class ResPartner(models.Model):
             "subject": rendered_subject,
             "email_to": recipient_emails,
             "body_html": rendered_body,
-            "auto_delete": True,
+            "auto_delete": False,
         })
         mail.send()
         _logger.info(
