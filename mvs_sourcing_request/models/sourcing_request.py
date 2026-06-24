@@ -296,7 +296,7 @@ class SourcingRequest(models.Model):
                     "product_qty": vendor.qty_to_source or line.product_qty,
                     "price_unit": vendor.price,
                     "date_planned": date_planned,
-                    "product_uom_id": line.product_id.uom_po_id.id,
+                    "product_uom_id": line.product_id.uom_id.id,
                     "name": line.product_id.display_name,
                 }),
             ],
