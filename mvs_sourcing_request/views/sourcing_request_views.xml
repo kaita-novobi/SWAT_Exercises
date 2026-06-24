@@ -137,7 +137,7 @@
                         domain="[('state', '=', 'in_sourcing')]"/>
                 <filter name="po_created" string="PO Created"
                         domain="[('state', '=', 'po_created')]"/>
-                <group expand="0" string="Group By">
+                <group>
                     <filter name="group_state" string="Status"
                             context="{'group_by': 'state'}"/>
                     <filter name="group_buyer" string="Buyer"
