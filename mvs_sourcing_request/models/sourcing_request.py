@@ -330,67 +330,63 @@ class SourcingRequest(models.Model):
         }
 
     def _run_auto_procurement(self, auto_lines):
-        """R04 — trigger native buy procurement for Automatic lines.
+        """R04 — create a draft PO per preferred vendor for the Automatic lines.
 
-        Runs the standard Buy route so Odoo creates/merges the draft RFQ and
-        links the stock moves, then stamps the resulting PO(s) back onto this
-        request for traceability. ``procurement.group.run`` raises a UserError
-        of its own if no Buy rule can be resolved (no route / no warehouse).
+        Direct-PO realisation of the Automatic path (approved deviation from
+        TDD §4.2; deep native procurement / MTO is deferred to MVS-019 per the
+        FDD). One draft ``purchase.order`` per preferred vendor, seeded from the
+        product's best ``supplierinfo`` (Automatic lines to the same vendor are
+        merged into one PO). The buyer confirms the PO manually.
+
+        Auto POs carry ``sourcing_request_id`` for traceability but NO
+        ``sourcing_vendor_line_id`` — they are not candidate RFQs and must never
+        be treated as losers in :meth:`action_create_purchase_orders`.
         """
-        ProcurementGroup = self.env["procurement.group"]
-        buy_route = self.env.ref(
-            "purchase_stock.route_warehouse0_buy", raise_if_not_found=False
-        )
-        if not buy_route:
-            raise UserError(_("The standard Buy route is not available on this database."))
-        warehouse = self.env["stock.warehouse"].search(
-            [("company_id", "=", self.company_id.id)], limit=1
-        )
-        if not warehouse:
-            raise UserError(
-                _("No warehouse is configured for company %s.", self.company_id.display_name)
-            )
+        PurchaseOrder = self.env["purchase.order"]
+        date_order = fields.Datetime.now()
 
-        group = ProcurementGroup.create({
-            "name": self.name,
-            "partner_id": self.sale_order_id.partner_id.id,
-        })
-        date_planned = fields.Datetime.to_string(
-            self.shipping_date or fields.Datetime.now()
-        )
-        procurements = []
+        # Group Automatic lines by their preferred vendor (BR-012 already
+        # guaranteed every Automatic line has a usable seller).
+        by_vendor = {}
         for line in auto_lines:
-            product = line.product_id
-            procurements.append(ProcurementGroup.Procurement(
-                product,
-                line.product_qty,
-                product.uom_id,
-                warehouse.lot_stock_id,
-                line.product_id.display_name,
-                self.name,
-                self.company_id,
-                {
-                    "company_id": self.company_id,
-                    "group_id": group,
-                    "date_planned": date_planned,
-                    "date_deadline": date_planned,
-                    "route_ids": buy_route,
-                    "warehouse_id": warehouse,
-                },
-            ))
+            seller = line._get_preferred_seller()
+            if not seller:
+                continue
+            by_vendor.setdefault(seller.partner_id, []).append((line, seller))
 
-        existing = self.env["purchase.order"].search([
-            ("origin", "=", self.name),
-            ("state", "=", "draft"),
-        ])
-        ProcurementGroup.run(procurements)
-        created = self.env["purchase.order"].search([
-            ("origin", "like", self.name),
-            ("state", "=", "draft"),
-            ("sourcing_request_id", "=", False),
-        ]) - existing
-        if created:
-            created.write({"sourcing_request_id": self.id})
+        created = PurchaseOrder
+        for partner, line_sellers in by_vendor.items():
+            first_seller = line_sellers[0][1]
+            payment_term = partner.with_company(
+                self.company_id
+            ).property_supplier_payment_term_id
+            order_lines = [
+                (0, 0, {
+                    "product_id": line.product_id.id,
+                    "product_qty": line.product_qty,
+                    "price_unit": seller.price,
+                    # TD-003: date_planned = order date + seller lead time.
+                    "date_planned": date_order + timedelta(days=seller.delay or 0),
+                    "product_uom_id": line.product_id.uom_id.id,
+                    "name": line.product_id.display_name,
+                })
+                for line, seller in line_sellers
+            ]
+            order = PurchaseOrder.create({
+                "partner_id": partner.id,
+                "user_id": (partner.buyer_id or self.env.user).id,
+                "company_id": self.company_id.id,
+                "currency_id": (
+                    first_seller.currency_id or self.company_id.currency_id
+                ).id,
+                "payment_term_id": payment_term.id or False,
+                "date_order": date_order,
+                "origin": self.name,
+                "sourcing_request_id": self.id,
+                "order_line": order_lines,
+            })
+            created |= order
+        return created
 
     def _notify(self, message):
         return {
