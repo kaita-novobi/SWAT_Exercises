@@ -1,0 +1,10 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_sourcing_request_purchase_user,sourcing.request purchase user,model_sourcing_request,purchase.group_purchase_user,1,1,1,0
+access_sourcing_request_purchase_manager,sourcing.request purchase manager,model_sourcing_request,purchase.group_purchase_manager,1,1,1,1
+access_sourcing_request_salesman,sourcing.request salesman,model_sourcing_request,sales_team.group_sale_salesman,1,0,1,0
+access_sourcing_request_line_purchase_user,sourcing.request.line purchase user,model_sourcing_request_line,purchase.group_purchase_user,1,1,1,1
+access_sourcing_request_line_purchase_manager,sourcing.request.line purchase manager,model_sourcing_request_line,purchase.group_purchase_manager,1,1,1,1
+access_sourcing_request_line_salesman,sourcing.request.line salesman,model_sourcing_request_line,sales_team.group_sale_salesman,1,0,0,0
+access_sourcing_request_line_vendor_purchase_user,sourcing.request.line.vendor purchase user,model_sourcing_request_line_vendor,purchase.group_purchase_user,1,1,1,1
+access_sourcing_request_line_vendor_purchase_manager,sourcing.request.line.vendor purchase manager,model_sourcing_request_line_vendor,purchase.group_purchase_manager,1,1,1,1
+access_sourcing_request_line_vendor_salesman,sourcing.request.line.vendor salesman,model_sourcing_request_line_vendor,sales_team.group_sale_salesman,1,0,0,0

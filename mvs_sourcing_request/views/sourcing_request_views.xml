@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Candidate vendor grid is embedded in the line form below -->
+    <record id="view_sourcing_request_line_form" model="ir.ui.view">
+        <field name="name">sourcing.request.line.form</field>
+        <field name="model">sourcing.request.line</field>
+        <field name="arch" type="xml">
+            <form string="Sourcing Line">
+                <group>
+                    <group>
+                        <field name="product_id"/>
+                        <field name="product_qty"/>
+                        <field name="routing"/>
+                    </group>
+                    <group>
+                        <field name="allocated_qty"/>
+                        <field name="is_fully_allocated"/>
+                    </group>
+                </group>
+                <separator string="Candidate Vendors"/>
+                <field name="vendor_line_ids">
+                    <list editable="bottom"
+                          decoration-success="is_best_price"
+                          decoration-info="is_best_delay">
+                        <field name="is_best_price" column_invisible="1"/>
+                        <field name="is_best_delay" column_invisible="1"/>
+                        <field name="partner_id"/>
+                        <field name="price"/>
+                        <field name="delay"/>
+                        <field name="min_qty"/>
+                        <field name="currency_id" column_invisible="1"/>
+                        <field name="payment_term_id"/>
+                        <field name="qty_to_source"/>
+                        <field name="selected"/>
+                        <field name="selection_reason"/>
+                        <field name="rfq_id" readonly="1"/>
+                    </list>
+                </field>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_sourcing_request_form" model="ir.ui.view">
+        <field name="name">sourcing.request.form</field>
+        <field name="model">sourcing.request</field>
+        <field name="arch" type="xml">
+            <form string="Sourcing Request">
+                <header>
+                    <button name="action_start" type="object" string="Start"
+                            class="oe_highlight" invisible="state != 'draft'"/>
+                    <button name="action_create_rfqs" type="object" string="Create RFQs"
+                            class="oe_highlight" invisible="state != 'in_sourcing'"/>
+                    <button name="action_create_purchase_orders" type="object"
+                            string="Create Purchase Orders" class="oe_highlight"
+                            invisible="state not in ('in_sourcing', 'selected')"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="draft,in_sourcing,selected,po_created,done"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_view_purchase_orders" type="object"
+                                class="oe_stat_button" icon="fa-shopping-cart"
+                                invisible="po_count == 0">
+                            <field name="po_count" widget="statinfo" string="Purchase Orders"/>
+                        </button>
+                    </div>
+                    <div class="oe_title">
+                        <h1><field name="name" readonly="1"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="sale_order_id"
+                                   readonly="state != 'draft'"/>
+                            <field name="origin"/>
+                            <field name="user_id"/>
+                        </group>
+                        <group>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="shipping_date"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Lines" name="lines">
+                            <field name="line_ids"
+                                   readonly="state in ('po_created', 'done', 'cancel')"
+                                   context="{'form_view_ref': 'mvs_sourcing_request.view_sourcing_request_line_form'}">
+                                <list>
+                                    <field name="product_id"/>
+                                    <field name="product_qty"/>
+                                    <field name="routing"/>
+                                    <field name="allocated_qty"/>
+                                    <field name="is_fully_allocated"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_sourcing_request_list" model="ir.ui.view">
+        <field name="name">sourcing.request.list</field>
+        <field name="model">sourcing.request</field>
+        <field name="arch" type="xml">
+            <list string="Sourcing Requests"
+                  decoration-muted="state == 'cancel'"
+                  decoration-success="state == 'done'">
+                <field name="name"/>
+                <field name="sale_order_id"/>
+                <field name="user_id"/>
+                <field name="shipping_date"/>
+                <field name="po_count" string="POs"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="state" widget="badge"
+                       decoration-info="state == 'in_sourcing'"
+                       decoration-success="state in ('po_created', 'done')"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_sourcing_request_search" model="ir.ui.view">
+        <field name="name">sourcing.request.search</field>
+        <field name="model">sourcing.request</field>
+        <field name="arch" type="xml">
+            <search string="Sourcing Requests">
+                <field name="name"/>
+                <field name="sale_order_id"/>
+                <field name="user_id"/>
+                <filter name="my_requests" string="My Requests"
+                        domain="[('user_id', '=', uid)]"/>
+                <separator/>
+                <filter name="draft" string="Draft" domain="[('state', '=', 'draft')]"/>
+                <filter name="in_sourcing" string="In Sourcing"
+                        domain="[('state', '=', 'in_sourcing')]"/>
+                <filter name="po_created" string="PO Created"
+                        domain="[('state', '=', 'po_created')]"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_state" string="Status"
+                            context="{'group_by': 'state'}"/>
+                    <filter name="group_buyer" string="Buyer"
+                            context="{'group_by': 'user_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_sourcing_request" model="ir.actions.act_window">
+        <field name="name">Sourcing Requests</field>
+        <field name="res_model">sourcing.request</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_sourcing_request_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No sourcing request yet
+            </p><p>
+                Sourcing requests are raised from a confirmed sales order to
+                source its products across multiple vendors.
+            </p>
+        </field>
+    </record>
+
+    <menuitem id="menu_sourcing_request"
+              name="Sourcing Requests"
+              parent="purchase.menu_procurement_management"
+              action="action_sourcing_request"
+              sequence="15"/>
+
+</odoo>
