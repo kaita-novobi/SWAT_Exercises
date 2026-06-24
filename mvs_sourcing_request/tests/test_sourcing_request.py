@@ -158,7 +158,7 @@ class TestSourcingRequest(TransactionCase):
                 "product_id": self.product.id,
                 "product_qty": 3.0,
                 "price_unit": 10.0,
-                "product_uom_id": self.product.uom_po_id.id,
+                "product_uom_id": self.product.uom_id.id,
                 "name": self.product.display_name,
             })],
         })
