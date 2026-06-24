@@ -99,6 +99,29 @@ class TestSourcingRequest(TransactionCase):
             request.action_start()
 
     # ------------------------------------------------------------------
+    # R04 — Start creates a direct draft PO to the preferred vendor
+    # (regression for the removed v19 procurement.group API).
+    # ------------------------------------------------------------------
+    def test_r04_auto_start_creates_direct_po(self):
+        request = self._make_request()
+        request.line_ids.routing = "auto"
+        request.action_start()
+
+        self.assertEqual(request.state, "in_sourcing")
+        self.assertEqual(len(request.purchase_order_ids), 1)
+        po = request.purchase_order_ids
+        self.assertEqual(po.state, "draft")
+        # Cheapest seller (Vendor A @ 100) is the preferred vendor.
+        self.assertEqual(po.partner_id, self.vendor_a)
+        self.assertEqual(po.sourcing_request_id, request)
+        self.assertFalse(
+            po.sourcing_vendor_line_id,
+            "Automatic PO must not be a candidate RFQ (no vendor-line link)",
+        )
+        self.assertEqual(po.order_line.product_id, self.product)
+        self.assertEqual(po.order_line.product_qty, 10.0)
+
+    # ------------------------------------------------------------------
     # BR-005 — qty_to_source bounds
     # ------------------------------------------------------------------
     def test_br005_qty_to_source_bounds(self):
