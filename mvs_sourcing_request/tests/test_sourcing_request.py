@@ -4,7 +4,7 @@
 from datetime import timedelta
 
 from odoo import fields
-from odoo.exceptions import UserError, ValidationError
+from odoo.exceptions import AccessError, UserError, ValidationError
 from odoo.tests import TransactionCase, tagged
 
 
@@ -165,6 +165,99 @@ class TestSourcingRequest(TransactionCase):
         self.assertFalse(po.sourcing_vendor_line_id)
         po.order_line[0].price_unit = 12.0  # must not raise
         self.assertEqual(po.order_line[0].price_unit, 12.0)
+
+    # ------------------------------------------------------------------
+    # R06/R07 — Create POs with a mixed Automatic + Assisted request
+    # Regression: Automatic lines carry seeded candidate rows and Automatic
+    # procurement POs carry sourcing_request_id but no sourcing_vendor_line_id.
+    # Creating POs must NOT (a) raise BR-003 for the Automatic line, nor
+    # (b) cancel the Automatic procurement PO as a "loser".
+    # ------------------------------------------------------------------
+    def test_create_pos_mixed_auto_assisted(self):
+        # Second product for the Automatic line (purchasable, has a vendor).
+        product_auto = self.env["product.product"].create({
+            "name": "Auto Widget",
+            "type": "consu",
+            "is_storable": False,
+            "purchase_ok": True,
+            "seller_ids": [(0, 0, {"partner_id": self.vendor_a.id,
+                                   "price": 50.0, "delay": 3, "min_qty": 1.0})],
+        })
+        self.sale_order.order_line = [(0, 0, {
+            "product_id": product_auto.id,
+            "product_uom_qty": 5.0,
+        })]
+        request = self._make_request()
+
+        assisted_line = request.line_ids.filtered(
+            lambda l: l.product_id == self.product)
+        auto_line = request.line_ids.filtered(
+            lambda l: l.product_id == product_auto)
+        assisted_line.routing = "assisted"
+        auto_line.routing = "auto"
+        self.assertTrue(auto_line.vendor_line_ids,
+                        "Automatic line is still seeded with candidate rows")
+
+        # Move to in_sourcing without invoking real procurement, then create
+        # the Assisted RFQs and simulate the Automatic procurement PO.
+        request.state = "in_sourcing"
+        request.action_create_rfqs()
+        auto_po = self.env["purchase.order"].create({
+            "partner_id": self.vendor_a.id,
+            "sourcing_request_id": request.id,
+            "order_line": [(0, 0, {
+                "product_id": product_auto.id,
+                "product_qty": 5.0,
+                "price_unit": 50.0,
+                "product_uom_id": product_auto.uom_id.id,
+                "name": product_auto.display_name,
+            })],
+        })
+        self.assertEqual(auto_po.state, "draft")
+
+        # Pick the cheaper assisted vendor and allocate the full qty.
+        winner = assisted_line.vendor_line_ids.sorted("price")[0]
+        winner.selected = True
+        winner.qty_to_source = assisted_line.product_qty
+
+        request.with_context(confirm_allocation=True).action_create_purchase_orders()
+
+        self.assertEqual(request.state, "po_created")
+        # (b) Automatic PO survives.
+        self.assertNotEqual(auto_po.state, "cancel",
+                            "Automatic procurement PO must not be cancelled")
+        # Winner confirmed, the other candidate RFQ cancelled.
+        self.assertEqual(winner.rfq_id.state, "purchase")
+        loser = (assisted_line.vendor_line_ids - winner)
+        self.assertEqual(loser.rfq_id.state, "cancel")
+
+    # ------------------------------------------------------------------
+    # F2 — can_create_po drives the Create Purchase Orders button visibility
+    # ------------------------------------------------------------------
+    def test_f2_can_create_po_flag(self):
+        request = self._make_request()
+        request.line_ids.routing = "assisted"
+        self.assertFalse(request.can_create_po, "No selection yet")
+        vendor = request.line_ids.vendor_line_ids.sorted("price")[0]
+        vendor.selected = True
+        self.assertFalse(request.can_create_po, "Selected but qty still 0")
+        vendor.qty_to_source = request.line_ids.product_qty
+        self.assertTrue(request.can_create_po, "Selected with positive qty")
+
+    # ------------------------------------------------------------------
+    # BR-008 — action guards refuse a user without purchasing rights
+    # (§10 Automated). ACL grants sourcing.request only to sales/purchase
+    # groups; a plain internal user gets AccessError on the lifecycle actions.
+    # ------------------------------------------------------------------
+    def test_br008_unauthorized_user_blocked(self):
+        request = self._make_request()
+        plain_user = self.env["res.users"].create({
+            "name": "No Access",
+            "login": "no_access_mvs003",
+            "group_ids": [(6, 0, [self.env.ref("base.group_user").id])],
+        })
+        with self.assertRaises(AccessError):
+            request.with_user(plain_user).action_start()
 
     # ------------------------------------------------------------------
     # §6.2 — multi-company record rules (all three models)
