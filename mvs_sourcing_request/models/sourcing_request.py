@@ -66,6 +66,12 @@ class SourcingRequest(models.Model):
     po_count = fields.Integer(
         string="PO Count", compute="_compute_po_count",
     )
+    can_create_po = fields.Boolean(
+        string="Has Selected Winner", compute="_compute_can_create_po",
+        help="True once at least one Assisted candidate vendor is selected with "
+             "a positive Qty to Source — drives the Create Purchase Orders button "
+             "(F2 / FDD §4 'Enabled When').",
+    )
 
     # ------------------------------------------------------------------
     # Compute
@@ -74,6 +80,20 @@ class SourcingRequest(models.Model):
     def _compute_po_count(self):
         for request in self:
             request.po_count = len(request.purchase_order_ids)
+
+    @api.depends(
+        "line_ids.routing",
+        "line_ids.vendor_line_ids.selected",
+        "line_ids.vendor_line_ids.qty_to_source",
+    )
+    def _compute_can_create_po(self):
+        for request in self:
+            winners = request.line_ids.filtered(
+                lambda l: l.routing == "assisted"
+            ).vendor_line_ids.filtered(
+                lambda v: v.selected and v.qty_to_source > 0
+            )
+            request.can_create_po = bool(winners)
 
     # ------------------------------------------------------------------
     # CRUD
@@ -201,7 +221,11 @@ class SourcingRequest(models.Model):
                 _("Purchase orders can only be created from a sourcing request that is in progress.")
             )
 
-        lines_with_vendors = self.line_ids.filtered(lambda l: l.vendor_line_ids)
+        # Only Assisted lines take part in vendor selection / RFQ confirmation.
+        # Automatic lines were already procured at Start; their seeded candidate
+        # rows are never selected and must not be treated as unresolved (BR-003).
+        assisted_lines = self.line_ids.filtered(lambda l: l.routing == "assisted")
+        lines_with_vendors = assisted_lines.filtered(lambda l: l.vendor_line_ids)
 
         # BR-003 — a line offering candidates must have a winner.
         unresolved = lines_with_vendors.filtered(
@@ -235,10 +259,13 @@ class SourcingRequest(models.Model):
                 _("Selected vendors have no draft RFQ to confirm. Create RFQs first.")
             )
 
-        losers = (
-            self.purchase_order_ids
-            - winners.mapped("rfq_id")
-        ).filtered(lambda po: po.state in ("draft", "sent"))
+        # Losers are the non-selected candidate RFQs only. Automatic-procurement
+        # POs carry a sourcing_request_id but NO sourcing_vendor_line_id, so they
+        # are excluded here and survive (they must not be cancelled).
+        candidate_rfqs = self.purchase_order_ids.filtered("sourcing_vendor_line_id")
+        losers = (candidate_rfqs - winners.mapped("rfq_id")).filtered(
+            lambda po: po.state in ("draft", "sent")
+        )
 
         # Push final grid figures onto the winning RFQs, then confirm.
         for vendor in winners:

@@ -53,7 +53,8 @@
                             class="oe_highlight" invisible="state != 'in_sourcing'"/>
                     <button name="action_create_purchase_orders" type="object"
                             string="Create Purchase Orders" class="oe_highlight"
-                            invisible="state not in ('in_sourcing', 'selected')"/>
+                            invisible="state not in ('in_sourcing', 'selected') or not can_create_po"/>
+                    <field name="can_create_po" invisible="1"/>
                     <field name="state" widget="statusbar"
                            statusbar_visible="draft,in_sourcing,selected,po_created,done"/>
                 </header>
