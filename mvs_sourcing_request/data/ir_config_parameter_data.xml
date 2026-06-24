@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <!-- D-014: routing staleness threshold N (days) for supplierinfo.write_date -->
+        <function model="ir.config_parameter" name="set_param"
+                  eval="('mvs_sourcing.stale_days', '90')"/>
+    </data>
+</odoo>
