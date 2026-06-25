@@ -301,6 +301,66 @@ class TestSourcingRequest(TransactionCase):
         with self.assertRaises(AccessError):
             request.with_user(plain_user).action_start()
 
+    # ==================================================================
+    # MVS-024 — vendor comparison enhancements (A1 / B1 read-outs)
+    # ==================================================================
+    def test_r01_total_line_cost(self):
+        request = self._make_request()
+        vendor = request.line_ids.vendor_line_ids.sorted("price")[0]  # A @ 100
+        # Before allocation: estimate on required qty (10).
+        self.assertEqual(vendor._get_total_amount(), 1000.0)
+        self.assertIn("(est.)", vendor.total_line_cost_display)
+        # After allocation: price × Qty to Source.
+        vendor.qty_to_source = 4.0
+        self.assertEqual(vendor._get_total_amount(), 400.0)
+        self.assertNotIn("(est.)", vendor.total_line_cost_display)
+
+    def test_r02_is_best_total(self):
+        request = self._make_request()
+        vendors = request.line_ids.vendor_line_ids.sorted("price")
+        self.assertTrue(vendors[0].is_best_total)   # A @ 100 → lowest total
+        self.assertFalse(vendors[1].is_best_total)  # B @ 120
+
+    def test_r03_estimated_total_spend(self):
+        request = self._make_request()
+        self.assertEqual(request.estimated_total_spend, 0.0)
+        vendors = request.line_ids.vendor_line_ids.sorted("price")
+        vendors[0].write({"selected": True, "qty_to_source": 4.0})
+        self.assertEqual(request.estimated_total_spend, 400.0)
+        vendors[1].write({"selected": True, "qty_to_source": 6.0})
+        self.assertEqual(request.estimated_total_spend, 1120.0)  # 4×100 + 6×120
+
+    def test_r04_sourced_awaiting_counts(self):
+        so = self.env["sale.order"].create({
+            "partner_id": self.customer.id,
+            "order_line": [
+                (0, 0, {"product_id": self.product.id, "product_uom_qty": 10.0}),
+                (0, 0, {"product_id": self.product_no_vendor.id,
+                        "product_uom_qty": 4.0}),
+            ],
+        })
+        so.action_request_sourcing()
+        request = so.sourcing_request_ids
+        self.assertEqual(len(request.line_ids), 2)
+        sourced_line = request.line_ids.filtered(
+            lambda l: l.product_id == self.product)
+        sourced_line.vendor_line_ids.sorted("price")[0].write(
+            {"selected": True, "qty_to_source": 10.0})
+        self.assertEqual(request.lines_sourced_count, 1)
+        self.assertEqual(request.lines_awaiting_count, 1)
+        self.assertIn("1 sourced / 1 awaiting", request.sourcing_progress_display)
+
+    def test_r05_deadline_risk(self):
+        self.sale_order.commitment_date = fields.Datetime.now() + timedelta(days=1)
+        request = self._make_request()
+        # Unsourced line: earliest candidate lead time (2d) > 1-day deadline → risk.
+        self.assertEqual(request.deadline_risk_count, 1)
+        self.assertEqual(request.deadline_risk_display, "1")
+        # No Shipping Date → em dash, no risk.
+        self.sale_order.commitment_date = False
+        self.assertEqual(request.deadline_risk_count, 0)
+        self.assertEqual(request.deadline_risk_display, "—")
+
     # ------------------------------------------------------------------
     # §6.2 — multi-company record rules (all three models)
     # ------------------------------------------------------------------

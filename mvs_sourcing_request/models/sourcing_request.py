@@ -77,6 +77,33 @@ class SourcingRequest(models.Model):
         help="True once at least one candidate vendor has a linked RFQ — used to "
              "de-emphasize the Create RFQs button.",
     )
+    # MVS-024 B1 — request summary header read-outs (computed, store=False).
+    company_currency_id = fields.Many2one(
+        "res.currency", related="company_id.currency_id", readonly=True,
+        string="Company Currency",
+    )
+    estimated_total_spend = fields.Monetary(
+        string="Estimated Total Spend", compute="_compute_summary",
+        currency_field="company_currency_id",
+        help="R03/D-002 — Σ (price × Qty to Source) over selected vendor rows only.",
+    )
+    lines_sourced_count = fields.Integer(
+        string="Lines Sourced", compute="_compute_summary",
+    )
+    lines_awaiting_count = fields.Integer(
+        string="Lines Awaiting", compute="_compute_summary",
+    )
+    sourcing_progress_display = fields.Char(
+        string="Sourcing Progress", compute="_compute_summary",
+    )
+    deadline_risk_count = fields.Integer(
+        string="Deadline Risk", compute="_compute_summary",
+    )
+    deadline_risk_display = fields.Char(
+        string="Deadline Risk", compute="_compute_summary",
+        help="R05 — count of lines whose expected arrival exceeds the Shipping "
+             "Date; '—' when the request has no Shipping Date.",
+    )
 
     # ------------------------------------------------------------------
     # Compute
@@ -104,6 +131,35 @@ class SourcingRequest(models.Model):
     def _compute_rfq_created(self):
         for request in self:
             request.rfq_created = bool(request.line_ids.vendor_line_ids.rfq_id)
+
+    @api.depends(
+        "line_ids.is_sourced", "line_ids.is_deadline_risk", "shipping_date",
+        "line_ids.vendor_line_ids.selected",
+        "line_ids.vendor_line_ids.price",
+        "line_ids.vendor_line_ids.qty_to_source",
+    )
+    def _compute_summary(self):
+        for request in self:
+            selected = request.line_ids.vendor_line_ids.filtered(
+                lambda v: v.selected and v.qty_to_source > 0
+            )
+            request.estimated_total_spend = sum(
+                v.price * v.qty_to_source for v in selected
+            )
+            sourced = request.line_ids.filtered("is_sourced")
+            request.lines_sourced_count = len(sourced)
+            request.lines_awaiting_count = len(request.line_ids) - len(sourced)
+            request.sourcing_progress_display = _(
+                "%(sourced)s sourced / %(awaiting)s awaiting",
+                sourced=request.lines_sourced_count,
+                awaiting=request.lines_awaiting_count,
+            )
+            request.deadline_risk_count = len(
+                request.line_ids.filtered("is_deadline_risk")
+            )
+            request.deadline_risk_display = (
+                str(request.deadline_risk_count) if request.shipping_date else "—"
+            )
 
     # ------------------------------------------------------------------
     # CRUD
