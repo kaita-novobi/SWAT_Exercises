@@ -44,10 +44,13 @@ class SourcingRequestLine(models.Model):
         string="Fully Allocated", compute="_compute_allocated",
     )
 
-    @api.depends("vendor_line_ids.qty_to_source", "product_qty")
+    @api.depends("vendor_line_ids.qty_to_source", "vendor_line_ids.selected", "product_qty")
     def _compute_allocated(self):
         for line in self:
-            allocated = sum(line.vendor_line_ids.mapped("qty_to_source"))
+            # Only selected candidate vendors count toward the allocation.
+            allocated = sum(
+                line.vendor_line_ids.filtered("selected").mapped("qty_to_source")
+            )
             line.allocated_qty = allocated
             rounding = line.product_id.uom_id.rounding or 0.01
             line.is_fully_allocated = (

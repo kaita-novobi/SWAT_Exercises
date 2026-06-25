@@ -50,11 +50,15 @@
                     <button name="action_start" type="object" string="Start"
                             class="oe_highlight" invisible="state != 'draft'"/>
                     <button name="action_create_rfqs" type="object" string="Create RFQs"
-                            class="oe_highlight" invisible="state != 'in_sourcing'"/>
+                            class="oe_highlight"
+                            invisible="state != 'in_sourcing' or rfq_created"/>
+                    <button name="action_create_rfqs" type="object" string="Create RFQs"
+                            invisible="state != 'in_sourcing' or not rfq_created"/>
                     <button name="action_create_purchase_orders" type="object"
                             string="Create Purchase Orders" class="oe_highlight"
                             invisible="state not in ('in_sourcing', 'selected') or not can_create_po"/>
                     <field name="can_create_po" invisible="1"/>
+                    <field name="rfq_created" invisible="1"/>
                     <field name="state" widget="statusbar"
                            statusbar_visible="draft,in_sourcing,selected,po_created,done"/>
                 </header>

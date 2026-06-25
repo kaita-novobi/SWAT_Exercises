@@ -72,6 +72,11 @@ class SourcingRequest(models.Model):
              "a positive Qty to Source — drives the Create Purchase Orders button "
              "(F2 / FDD §4 'Enabled When').",
     )
+    rfq_created = fields.Boolean(
+        string="RFQs Created", compute="_compute_rfq_created",
+        help="True once at least one candidate vendor has a linked RFQ — used to "
+             "de-emphasize the Create RFQs button.",
+    )
 
     # ------------------------------------------------------------------
     # Compute
@@ -94,6 +99,11 @@ class SourcingRequest(models.Model):
                 lambda v: v.selected and v.qty_to_source > 0
             )
             request.can_create_po = bool(winners)
+
+    @api.depends("line_ids.vendor_line_ids.rfq_id")
+    def _compute_rfq_created(self):
+        for request in self:
+            request.rfq_created = bool(request.line_ids.vendor_line_ids.rfq_id)
 
     # ------------------------------------------------------------------
     # CRUD

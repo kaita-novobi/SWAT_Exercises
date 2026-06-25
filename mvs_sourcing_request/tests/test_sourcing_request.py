@@ -153,7 +153,9 @@ class TestSourcingRequest(TransactionCase):
         request.line_ids.routing = "assisted"
         request.action_start()
         self.assertEqual(request.state, "in_sourcing")
+        self.assertFalse(request.rfq_created, "No RFQ before Create RFQs")
         request.action_create_rfqs()
+        self.assertTrue(request.rfq_created, "rfq_created flips after Create RFQs")
 
         vendor = request.line_ids.vendor_line_ids.filtered("rfq_id")[0]
         rfq = vendor.rfq_id
@@ -253,6 +255,23 @@ class TestSourcingRequest(TransactionCase):
         self.assertEqual(winner.rfq_id.state, "purchase")
         loser = (assisted_line.vendor_line_ids - winner)
         self.assertEqual(loser.rfq_id.state, "cancel")
+
+    # ------------------------------------------------------------------
+    # Allocation counts only SELECTED candidate vendor lines
+    # ------------------------------------------------------------------
+    def test_allocated_counts_selected_only(self):
+        request = self._make_request()
+        line = request.line_ids  # required qty = 10
+        vendor_a, vendor_b = line.vendor_line_ids[0], line.vendor_line_ids[1]
+
+        vendor_a.write({"qty_to_source": 6.0, "selected": True})
+        vendor_b.write({"qty_to_source": 4.0, "selected": False})
+        self.assertEqual(line.allocated_qty, 6.0, "Only the selected row counts")
+        self.assertFalse(line.is_fully_allocated)
+
+        vendor_b.selected = True
+        self.assertEqual(line.allocated_qty, 10.0)
+        self.assertTrue(line.is_fully_allocated)
 
     # ------------------------------------------------------------------
     # F2 — can_create_po drives the Create Purchase Orders button visibility
