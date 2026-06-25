@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """Sourcing Request Line — one product to source within a request (TDD §3.1)."""
 
+from datetime import timedelta
+
 from odoo import _, api, fields, models
 from odoo.tools import float_compare
 
@@ -43,6 +45,17 @@ class SourcingRequestLine(models.Model):
     is_fully_allocated = fields.Boolean(
         string="Fully Allocated", compute="_compute_allocated",
     )
+    # MVS-024 B1 — line-level inputs the request summary header aggregates.
+    is_sourced = fields.Boolean(
+        string="Sourced", compute="_compute_is_sourced",
+        help="D-004 — the line has at least one selected vendor with Qty to "
+             "Source > 0.",
+    )
+    is_deadline_risk = fields.Boolean(
+        string="Deadline Risk", compute="_compute_is_deadline_risk",
+        help="D-003 — expected arrival (today + Lead Time) is later than the "
+             "request Shipping Date.",
+    )
 
     @api.depends("vendor_line_ids.qty_to_source", "vendor_line_ids.selected", "product_qty")
     def _compute_allocated(self):
@@ -56,6 +69,39 @@ class SourcingRequestLine(models.Model):
             line.is_fully_allocated = (
                 float_compare(allocated, line.product_qty, precision_rounding=rounding) == 0
             )
+
+    @api.depends("vendor_line_ids.selected", "vendor_line_ids.qty_to_source")
+    def _compute_is_sourced(self):
+        for line in self:
+            line.is_sourced = any(
+                v.selected and v.qty_to_source > 0 for v in line.vendor_line_ids
+            )
+
+    @api.depends(
+        "is_sourced", "request_id.shipping_date",
+        "vendor_line_ids.selected", "vendor_line_ids.qty_to_source",
+        "vendor_line_ids.delay",
+    )
+    def _compute_is_deadline_risk(self):
+        for line in self:
+            shipping = line.request_id.shipping_date
+            if not shipping:
+                line.is_deadline_risk = False
+                continue
+            if line.is_sourced:
+                # Latest expected arrival among the selected winners.
+                delays = line.vendor_line_ids.filtered(
+                    lambda v: v.selected and v.qty_to_source > 0
+                ).mapped("delay")
+            else:
+                # Early warning: earliest (best-case) candidate arrival (D-003).
+                delays = line.vendor_line_ids.mapped("delay")
+            if not delays:
+                line.is_deadline_risk = False
+                continue
+            arrival_delay = max(delays) if line.is_sourced else min(delays)
+            arrival = fields.Date.context_today(line) + timedelta(days=arrival_delay)
+            line.is_deadline_risk = arrival > shipping.date()
 
     @api.onchange("product_id")
     def _onchange_product_id_routing(self):

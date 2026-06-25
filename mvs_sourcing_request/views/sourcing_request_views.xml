@@ -22,9 +22,11 @@
                 <field name="vendor_line_ids">
                     <list editable="bottom"
                           decoration-success="is_best_price"
-                          decoration-info="is_best_delay">
+                          decoration-info="is_best_delay"
+                          decoration-bf="is_best_total">
                         <field name="is_best_price" column_invisible="1"/>
                         <field name="is_best_delay" column_invisible="1"/>
+                        <field name="is_best_total" column_invisible="1"/>
                         <field name="partner_id"/>
                         <field name="price"/>
                         <field name="delay"/>
@@ -32,6 +34,7 @@
                         <field name="currency_id" column_invisible="1"/>
                         <field name="payment_term_id"/>
                         <field name="qty_to_source"/>
+                        <field name="total_line_cost_display" string="Total"/>
                         <field name="selected"/>
                         <field name="selection_reason"/>
                         <field name="rfq_id" readonly="1"/>
@@ -84,6 +87,12 @@
                             <field name="company_id" groups="base.group_multi_company"/>
                             <field name="shipping_date"/>
                         </group>
+                    </group>
+                    <group string="Sourcing Summary" col="3">
+                        <field name="company_currency_id" invisible="1"/>
+                        <field name="estimated_total_spend"/>
+                        <field name="sourcing_progress_display"/>
+                        <field name="deadline_risk_display"/>
                     </group>
                     <notebook>
                         <page string="Lines" name="lines">

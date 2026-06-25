@@ -3,7 +3,7 @@
 
 from odoo import _, api, fields, models
 from odoo.exceptions import ValidationError
-from odoo.tools import float_compare
+from odoo.tools import float_compare, formatLang
 
 # Figure / decision fields whose change is logged to the request chatter (BR-011).
 TRACKED_FIELDS = {
@@ -50,6 +50,16 @@ class SourcingRequestLineVendor(models.Model):
     selection_reason = fields.Char(string="Selection Reason")
     is_best_price = fields.Boolean(string="Best Price", compute="_compute_best")
     is_best_delay = fields.Boolean(string="Best Lead Time", compute="_compute_best")
+    # MVS-024 A1 — total line cost read-out (computed, store=False).
+    total_line_cost_display = fields.Char(
+        string="Total Line Cost", compute="_compute_total_line_cost_display",
+        help="Unit price × Qty to Source; before allocation, × the required "
+             "quantity, marked '(est.)'. Single currency per line assumed (D-006).",
+    )
+    is_best_total = fields.Boolean(
+        string="Best Total", compute="_compute_is_best_total",
+        help="Lowest Total Line Cost among the line's candidate vendors (R02).",
+    )
 
     # ------------------------------------------------------------------
     # Compute
@@ -65,6 +75,33 @@ class SourcingRequestLineVendor(models.Model):
             delays = [v.delay for v in siblings]
             vendor.is_best_price = bool(prices) and vendor.price == min(prices)
             vendor.is_best_delay = bool(delays) and vendor.delay == min(delays)
+
+    def _get_total_amount(self):
+        """R01/D-001 — price × Qty to Source, or × required qty as an estimate."""
+        self.ensure_one()
+        qty = self.qty_to_source if self.qty_to_source > 0 else self.line_id.product_qty
+        return self.price * qty
+
+    @api.depends("price", "qty_to_source", "line_id.product_qty", "currency_id")
+    def _compute_total_line_cost_display(self):
+        for vendor in self:
+            currency = (
+                vendor.currency_id
+                or vendor.line_id.request_id.company_id.currency_id
+            )
+            label = formatLang(self.env, vendor._get_total_amount(), currency_obj=currency)
+            if vendor.qty_to_source <= 0:
+                label = _("%(amount)s (est.)", amount=label)
+            vendor.total_line_cost_display = label
+
+    @api.depends(
+        "price", "qty_to_source", "line_id.product_qty",
+        "line_id.vendor_line_ids.price", "line_id.vendor_line_ids.qty_to_source",
+    )
+    def _compute_is_best_total(self):
+        for vendor in self:
+            totals = [v._get_total_amount() for v in vendor.line_id.vendor_line_ids]
+            vendor.is_best_total = bool(totals) and vendor._get_total_amount() == min(totals)
 
     # ------------------------------------------------------------------
     # Constraints
