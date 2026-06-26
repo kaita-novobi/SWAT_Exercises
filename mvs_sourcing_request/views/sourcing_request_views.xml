@@ -108,6 +108,25 @@
                                 </list>
                             </field>
                         </page>
+                        <page string="Tracking Change" name="tracking_change">
+                            <field name="all_vendor_line_ids" readonly="1">
+                                <list create="false" delete="false"
+                                      decoration-warning="has_change">
+                                    <field name="has_change" column_invisible="1"/>
+                                    <field name="line_id" string="Product" readonly="1"/>
+                                    <field name="partner_id" readonly="1"/>
+                                    <field name="base_price" readonly="1"/>
+                                    <field name="price" readonly="1"/>
+                                    <field name="base_delay" readonly="1"/>
+                                    <field name="delay" readonly="1"/>
+                                    <field name="base_min_qty" readonly="1"/>
+                                    <field name="min_qty" readonly="1"/>
+                                    <field name="base_payment_term_id" readonly="1"/>
+                                    <field name="payment_term_id" readonly="1"/>
+                                    <field name="selection_reason" readonly="1"/>
+                                </list>
+                            </field>
+                        </page>
                     </notebook>
                 </sheet>
                 <chatter/>

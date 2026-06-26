@@ -104,6 +104,11 @@ class SourcingRequest(models.Model):
         help="R05 — count of lines whose expected arrival exceeds the Shipping "
              "Date; '—' when the request has no Shipping Date.",
     )
+    # MVS-025 — flat request-level collection for the Tracking Change tab.
+    all_vendor_line_ids = fields.One2many(
+        "sourcing.request.line.vendor", compute="_compute_all_vendor_lines",
+        string="Candidate Vendors (all lines)",
+    )
 
     # ------------------------------------------------------------------
     # Compute
@@ -160,6 +165,11 @@ class SourcingRequest(models.Model):
             request.deadline_risk_display = (
                 str(request.deadline_risk_count) if request.shipping_date else "—"
             )
+
+    @api.depends("line_ids.vendor_line_ids")
+    def _compute_all_vendor_lines(self):
+        for request in self:
+            request.all_vendor_line_ids = request.line_ids.vendor_line_ids
 
     # ------------------------------------------------------------------
     # CRUD

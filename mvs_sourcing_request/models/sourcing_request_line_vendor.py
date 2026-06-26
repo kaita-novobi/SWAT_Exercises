@@ -50,6 +50,27 @@ class SourcingRequestLineVendor(models.Model):
     selection_reason = fields.Char(string="Selection Reason")
     is_best_price = fields.Boolean(string="Best Price", compute="_compute_best")
     is_best_delay = fields.Boolean(string="Best Lead Time", compute="_compute_best")
+    # MVS-025 — immutable baseline snapshot (stored), captured once in create().
+    base_price = fields.Float(
+        string="Baseline Price", digits="Product Price", readonly=True,
+        help="Snapshot of Price at row creation; never updated afterwards.",
+    )
+    base_delay = fields.Integer(string="Baseline Lead Time (days)", readonly=True)
+    base_min_qty = fields.Float(
+        string="Baseline Min Qty", digits="Product Unit of Measure", readonly=True,
+    )
+    base_payment_term_id = fields.Many2one(
+        "account.payment.term", string="Baseline Payment Terms",
+        ondelete="set null", readonly=True,
+    )
+    # MVS-025 — change indicators (computed, store=False).
+    has_change = fields.Boolean(string="Changed", compute="_compute_change_flags")
+    price_changed = fields.Boolean(string="Price Changed", compute="_compute_change_flags")
+    delay_changed = fields.Boolean(string="Lead Time Changed", compute="_compute_change_flags")
+    min_qty_changed = fields.Boolean(string="Min Qty Changed", compute="_compute_change_flags")
+    payment_term_changed = fields.Boolean(
+        string="Payment Terms Changed", compute="_compute_change_flags",
+    )
     # MVS-024 A1 — total line cost read-out (computed, store=False).
     total_line_cost_display = fields.Char(
         string="Total Line Cost", compute="_compute_total_line_cost_display",
@@ -103,6 +124,24 @@ class SourcingRequestLineVendor(models.Model):
             totals = [v._get_total_amount() for v in vendor.line_id.vendor_line_ids]
             vendor.is_best_total = bool(totals) and vendor._get_total_amount() == min(totals)
 
+    @api.depends(
+        "price", "base_price", "delay", "base_delay",
+        "min_qty", "base_min_qty", "payment_term_id", "base_payment_term_id",
+    )
+    def _compute_change_flags(self):
+        """MVS-025 — latest figure differs from its immutable baseline."""
+        for vendor in self:
+            vendor.price_changed = vendor.price != vendor.base_price
+            vendor.delay_changed = vendor.delay != vendor.base_delay
+            vendor.min_qty_changed = vendor.min_qty != vendor.base_min_qty
+            vendor.payment_term_changed = (
+                vendor.payment_term_id != vendor.base_payment_term_id
+            )
+            vendor.has_change = any((
+                vendor.price_changed, vendor.delay_changed,
+                vendor.min_qty_changed, vendor.payment_term_changed,
+            ))
+
     # ------------------------------------------------------------------
     # Constraints
     # ------------------------------------------------------------------
@@ -126,8 +165,26 @@ class SourcingRequestLineVendor(models.Model):
                 )
 
     # ------------------------------------------------------------------
-    # CRUD — chatter logging (BR-011 / D-012)
+    # CRUD — baseline snapshot (MVS-025) + chatter logging (BR-011 / D-012)
     # ------------------------------------------------------------------
+    @api.model_create_multi
+    def create(self, vals_list):
+        """MVS-025 TD-001 — snapshot the row's own figures as the baseline.
+
+        Captured once, post-create, from the record's own values (the seeded
+        supplierinfo figures or the inline-entered ones) — never from a live
+        supplierinfo lookup, so it is immune to later master-data drift and
+        correct for inline-added vendors. base_* are absent from TRACKED_FIELDS,
+        so the write() below neither logs nor recurses on them.
+        """
+        records = super().create(vals_list)
+        for vendor in records:
+            vendor.base_price = vendor.price
+            vendor.base_delay = vendor.delay
+            vendor.base_min_qty = vendor.min_qty
+            vendor.base_payment_term_id = vendor.payment_term_id.id
+        return records
+
     def write(self, vals):
         tracked = TRACKED_FIELDS & set(vals.keys())
         snapshots = {}

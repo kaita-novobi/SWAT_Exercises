@@ -361,6 +361,52 @@ class TestSourcingRequest(TransactionCase):
         self.assertEqual(request.deadline_risk_count, 0)
         self.assertEqual(request.deadline_risk_display, "—")
 
+    # ==================================================================
+    # MVS-025 — vendor change tracking (baseline snapshot)
+    # ==================================================================
+    def test_r01_baseline_captured_and_immutable(self):
+        request = self._make_request()
+        vendor = request.line_ids.vendor_line_ids.sorted("price")[0]  # A @ 100/5
+        # Baseline snapshot == latest at creation.
+        self.assertEqual(vendor.base_price, vendor.price)
+        self.assertEqual(vendor.base_delay, vendor.delay)
+        self.assertEqual(vendor.base_min_qty, vendor.min_qty)
+        self.assertEqual(vendor.base_payment_term_id, vendor.payment_term_id)
+        self.assertFalse(vendor.has_change)
+
+        msgs_before = len(request.message_ids)
+        vendor.write({"price": 55.0, "delay": 9})
+
+        # Baseline is immutable; the latest side moved.
+        self.assertEqual(vendor.base_price, 100.0)
+        self.assertEqual(vendor.base_delay, 5)
+        self.assertTrue(vendor.price_changed)
+        self.assertTrue(vendor.delay_changed)
+        self.assertTrue(vendor.has_change)
+        # R04 — MVS-003 BR-011 chatter still fires (coexistence).
+        self.assertGreater(len(request.message_ids), msgs_before)
+
+    def test_r02_tracking_collection(self):
+        request = self._make_request()
+        self.assertEqual(
+            set(request.all_vendor_line_ids.ids),
+            set(request.line_ids.vendor_line_ids.ids),
+        )
+        self.assertTrue(request.all_vendor_line_ids)
+        for vendor in request.all_vendor_line_ids:
+            self.assertFalse(vendor.has_change, "Freshly seeded row is unchanged")
+
+    def test_r05_baseline_acl(self):
+        request = self._make_request()
+        vendor = request.line_ids.vendor_line_ids[0]
+        plain_user = self.env["res.users"].create({
+            "name": "No Access 025",
+            "login": "no_access_mvs025",
+            "group_ids": [(6, 0, [self.env.ref("base.group_user").id])],
+        })
+        with self.assertRaises(AccessError):
+            vendor.with_user(plain_user).read(["base_price"])
+
     # ------------------------------------------------------------------
     # §6.2 — multi-company record rules (all three models)
     # ------------------------------------------------------------------
