@@ -82,6 +82,10 @@ class SourcingRequest(models.Model):
         "res.currency", related="company_id.currency_id", readonly=True,
         string="Company Currency",
     )
+    budget = fields.Monetary(
+        string="Budget", currency_field="company_currency_id", default=0.0,
+        help="Optional sourcing budget for this request.",
+    )
     estimated_total_spend = fields.Monetary(
         string="Estimated Total Spend", compute="_compute_summary",
         currency_field="company_currency_id",
