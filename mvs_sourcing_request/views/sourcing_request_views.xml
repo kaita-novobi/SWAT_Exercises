@@ -91,6 +91,7 @@
                     <group string="Sourcing Summary" col="3">
                         <field name="company_currency_id" invisible="1"/>
                         <field name="estimated_total_spend"/>
+                        <field name="budget"/>
                         <field name="sourcing_progress_display"/>
                         <field name="deadline_risk_display"/>
                     </group>
