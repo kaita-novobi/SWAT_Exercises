@@ -57,6 +57,17 @@ class SourcingRequest(models.Model):
         ],
         string="Status", default="draft", required=True, copy=False, tracking=True,
     )
+    # Mark Done / Cancel checkboxes — a freely-toggled UI onto ``state`` so it
+    # stays the single source of truth (statusbar + list colours follow). Ticking
+    # closes the request; unticking reopens it to its natural prior state. No
+    # effect on linked RFQs/POs.
+    is_done = fields.Boolean(
+        string="Done", compute="_compute_close_flags", inverse="_inverse_is_done",
+    )
+    is_cancelled = fields.Boolean(
+        string="Cancelled", compute="_compute_close_flags",
+        inverse="_inverse_is_cancelled",
+    )
     line_ids = fields.One2many(
         "sourcing.request.line", "request_id", string="Lines",
     )
@@ -174,6 +185,40 @@ class SourcingRequest(models.Model):
     def _compute_all_vendor_lines(self):
         for request in self:
             request.all_vendor_line_ids = request.line_ids.vendor_line_ids
+
+    @api.depends("state")
+    def _compute_close_flags(self):
+        for request in self:
+            request.is_done = request.state == "done"
+            request.is_cancelled = request.state == "cancel"
+
+    def _inverse_is_done(self):
+        for request in self:
+            if request.is_done:
+                request.state = "done"
+            elif request.state == "done":
+                request.state = request._reopen_state()
+
+    def _inverse_is_cancelled(self):
+        for request in self:
+            if request.is_cancelled:
+                request.state = "cancel"
+            elif request.state == "cancel":
+                request.state = request._reopen_state()
+
+    def _reopen_state(self):
+        """Natural state to fall back to when a closed request is reopened.
+
+        Derived from the request's own data (no stored history): POs already
+        exist → ``po_created``; sourcing was started (any RFQ seeded) →
+        ``in_sourcing``; otherwise ``draft``.
+        """
+        self.ensure_one()
+        if self.purchase_order_ids:
+            return "po_created"
+        if self.line_ids.vendor_line_ids.filtered("rfq_id"):
+            return "in_sourcing"
+        return "draft"
 
     # ------------------------------------------------------------------
     # CRUD
