@@ -115,7 +115,7 @@ class TestSourcingRequest(TransactionCase):
         self.assertEqual(po.partner_id, self.vendor_a)
         self.assertEqual(po.sourcing_request_id, request)
         self.assertFalse(
-            po.sourcing_vendor_line_id,
+            po.order_line.mapped("sourcing_vendor_line_id"),
             "Automatic PO must not be a candidate RFQ (no vendor-line link)",
         )
         self.assertEqual(po.order_line.product_id, self.product)
@@ -187,7 +187,7 @@ class TestSourcingRequest(TransactionCase):
                 "name": self.product.display_name,
             })],
         })
-        self.assertFalse(po.sourcing_vendor_line_id)
+        self.assertFalse(po.order_line.mapped("sourcing_vendor_line_id"))
         po.order_line[0].price_unit = 12.0  # must not raise
         self.assertEqual(po.order_line[0].price_unit, 12.0)
 
@@ -255,6 +255,109 @@ class TestSourcingRequest(TransactionCase):
         self.assertEqual(winner.rfq_id.state, "purchase")
         loser = (assisted_line.vendor_line_ids - winner)
         self.assertEqual(loser.rfq_id.state, "cancel")
+
+    # ------------------------------------------------------------------
+    # Merge RFQs by vendor — one RFQ per vendor, one line per product
+    # ------------------------------------------------------------------
+    def test_merge_rfqs_by_vendor(self):
+        product2 = self.env["product.product"].create({
+            "name": "Second Widget", "type": "consu", "is_storable": False,
+            "purchase_ok": True,
+            "seller_ids": [(0, 0, {"partner_id": self.vendor_a.id, "price": 80.0,
+                                   "delay": 4, "min_qty": 1.0})],
+        })
+        # Adds a second SO line; Vendor A is a candidate on both products.
+        self.sale_order.order_line = [(0, 0, {
+            "product_id": product2.id, "product_uom_qty": 5.0,
+        })]
+        request = self._make_request()
+        request.line_ids.routing = "assisted"
+        request.action_start()
+        request.action_create_rfqs()
+
+        a_rows = request.line_ids.vendor_line_ids.filtered(
+            lambda v: v.partner_id == self.vendor_a)
+        self.assertEqual(len(a_rows), 2, "Vendor A is a candidate on both lines")
+        a_rfqs = a_rows.mapped("rfq_id")
+        self.assertEqual(len(a_rfqs), 1, "Vendor A's two rows share ONE merged RFQ")
+        self.assertEqual(len(a_rfqs.order_line), 2,
+                         "Merged RFQ carries one line per product")
+        self.assertEqual(
+            set(a_rfqs.order_line.mapped("sourcing_vendor_line_id").ids),
+            set(a_rows.ids),
+            "Every merged RFQ line links back to its own candidate-vendor row",
+        )
+        # Vendor B only appears on the first product → its own single-line RFQ.
+        b_rows = request.line_ids.vendor_line_ids.filtered(
+            lambda v: v.partner_id == self.vendor_b)
+        self.assertEqual(len(b_rows.rfq_id), 1)
+        self.assertEqual(len(b_rows.rfq_id.order_line), 1)
+
+    # ------------------------------------------------------------------
+    # Convert to PO — drop qty-0 lines from a merged RFQ; keep the winners
+    # ------------------------------------------------------------------
+    def test_drop_zero_qty_lines_on_po_conversion(self):
+        product2 = self.env["product.product"].create({
+            "name": "Second Widget", "type": "consu", "is_storable": False,
+            "purchase_ok": True,
+            "seller_ids": [(0, 0, {"partner_id": self.vendor_a.id, "price": 80.0,
+                                   "delay": 4, "min_qty": 1.0})],
+        })
+        self.sale_order.order_line = [(0, 0, {
+            "product_id": product2.id, "product_uom_qty": 5.0,
+        })]
+        request = self._make_request()
+        request.line_ids.routing = "assisted"
+        request.action_start()
+        request.action_create_rfqs()
+
+        line1 = request.line_ids.filtered(lambda l: l.product_id == self.product)
+        line2 = request.line_ids.filtered(lambda l: l.product_id == product2)
+        a1 = line1.vendor_line_ids.filtered(lambda v: v.partner_id == self.vendor_a)
+        b1 = line1.vendor_line_ids.filtered(lambda v: v.partner_id == self.vendor_b)
+        a2 = line2.vendor_line_ids  # Vendor A only
+
+        merged_a_rfq = a1.rfq_id
+        self.assertEqual(merged_a_rfq, a2.rfq_id, "Vendor A rows share one RFQ")
+        self.assertEqual(len(merged_a_rfq.order_line), 2)
+
+        # line1: Vendor B wins the full qty; Vendor A is selected but at qty 0 so
+        # its merged-RFQ line must be dropped. line2: Vendor A wins the full qty.
+        b1.write({"selected": True, "qty_to_source": 10.0})
+        a1.write({"selected": True, "qty_to_source": 0.0})
+        a2.write({"selected": True, "qty_to_source": 5.0})
+
+        request.action_create_purchase_orders()
+
+        self.assertEqual(request.state, "po_created")
+        # Vendor A's merged RFQ keeps only the product2 line (the qty-0 line dropped).
+        self.assertEqual(merged_a_rfq.state, "purchase")
+        self.assertEqual(len(merged_a_rfq.order_line), 1)
+        self.assertEqual(merged_a_rfq.order_line.product_id, product2)
+        # Vendor B's RFQ wins product1.
+        self.assertEqual(b1.rfq_id.state, "purchase")
+
+    # ------------------------------------------------------------------
+    # Convert to PO — an RFQ with no surviving positive line is cancelled
+    # ------------------------------------------------------------------
+    def test_cancel_rfq_with_no_positive_line(self):
+        request = self._make_request()
+        request.line_ids.routing = "assisted"
+        request.action_start()
+        request.action_create_rfqs()
+
+        line = request.line_ids
+        a = line.vendor_line_ids.filtered(lambda v: v.partner_id == self.vendor_a)
+        b = line.vendor_line_ids.filtered(lambda v: v.partner_id == self.vendor_b)
+        # Both selected, but Vendor A at qty 0 → A's single-line RFQ empties out.
+        b.write({"selected": True, "qty_to_source": 10.0})
+        a.write({"selected": True, "qty_to_source": 0.0})
+
+        request.action_create_purchase_orders()
+
+        self.assertEqual(b.rfq_id.state, "purchase")
+        self.assertEqual(a.rfq_id.state, "cancel",
+                         "Vendor A's RFQ has no positive line → cancelled")
 
     # ------------------------------------------------------------------
     # Allocation counts only SELECTED candidate vendor lines

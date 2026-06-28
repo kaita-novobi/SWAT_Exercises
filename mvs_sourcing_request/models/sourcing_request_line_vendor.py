@@ -241,18 +241,26 @@ class SourcingRequestLineVendor(models.Model):
     # Helpers
     # ------------------------------------------------------------------
     def _apply_to_rfq(self):
-        """Push the final grid figures onto the linked draft RFQ (TD-001)."""
+        """Push the final grid figures onto this row's line in the shared RFQ (TD-001).
+
+        The RFQ is merged by vendor, so it locates *this* row's own order line via
+        the per-line ``sourcing_vendor_line_id`` link (not by product). The final
+        ``product_qty`` is the row's ``qty_to_source`` with no fallback — a zero is
+        kept as-is so :meth:`action_create_purchase_orders` can drop the line.
+        """
         for vendor in self:
             order = vendor.rfq_id
             if not order or order.state not in ("draft", "sent"):
                 continue
             po_line = order.order_line.filtered(
-                lambda l: l.product_id == vendor.line_id.product_id
+                lambda l: l.sourcing_vendor_line_id == vendor
             )[:1]
-            order_vals = {"payment_term_id": vendor.payment_term_id.id or False}
-            if po_line:
-                order_vals["order_line"] = [(1, po_line.id, {
+            if not po_line:
+                continue
+            order.with_context(skip_sourcing_sync=True).write({
+                "payment_term_id": vendor.payment_term_id.id or False,
+                "order_line": [(1, po_line.id, {
                     "price_unit": vendor.price,
-                    "product_qty": vendor.qty_to_source or vendor.line_id.product_qty,
-                })]
-            order.with_context(skip_sourcing_sync=True).write(order_vals)
+                    "product_qty": vendor.qty_to_source,
+                })],
+            })

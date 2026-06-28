@@ -262,38 +262,77 @@ class SourcingRequest(models.Model):
         return True
 
     def action_create_rfqs(self):
-        """R05 — one draft RFQ per shortlisted Assisted vendor row."""
+        """R05 — one draft RFQ **per vendor**, merging that vendor's candidate rows.
+
+        Candidate-vendor rows across every Assisted line are grouped by vendor; a
+        vendor offering several products gets a single RFQ with one order line per
+        product (each line carrying its ``sourcing_vendor_line_id`` link). A vendor
+        that already has a draft RFQ on this request has the new lines appended to
+        it rather than spawning a second RFQ (idempotent re-run).
+        """
         self.ensure_one()
         if self.state != "in_sourcing":
             raise UserError(_("RFQs can only be created while the request is in sourcing."))
 
         PurchaseOrder = self.env["purchase.order"]
         assisted_lines = self.line_ids.filtered(lambda l: l.routing == "assisted")
-        created = self.env["purchase.order"]
-
-        for line in assisted_lines:
-            shortlist = line.vendor_line_ids.filtered(lambda v: not v.rfq_id)
-            if not shortlist:
-                # BR-009: assisted line with no vendor row -> skip (warned elsewhere).
-                continue
-            for vendor in shortlist:
-                order = PurchaseOrder.create(self._prepare_rfq_vals(vendor))
-                vendor.rfq_id = order.id
-                created |= order
-
-        if not created:
+        # BR-009: rows still needing an RFQ, across all Assisted lines.
+        pending = assisted_lines.vendor_line_ids.filtered(lambda v: not v.rfq_id)
+        if not pending:
             return self._notify(
                 _("No new RFQ to create — every Assisted line already has its RFQs.")
             )
-        self.message_post(body=_("%s draft RFQ(s) created.", len(created)))
+
+        # Group by vendor, preserving the comparison order (_order = price, delay).
+        by_partner = {}
+        for vendor in pending:
+            by_partner.setdefault(
+                vendor.partner_id, self.env["sourcing.request.line.vendor"]
+            )
+            by_partner[vendor.partner_id] |= vendor
+
+        date_order = fields.Datetime.now()
+        created = PurchaseOrder
+        updated = PurchaseOrder
+        for partner, rows in by_partner.items():
+            # Reuse an existing draft candidate RFQ for this vendor on this request.
+            existing = self.purchase_order_ids.filtered(
+                lambda o: o.partner_id == partner
+                and o.state in ("draft", "sent")
+                and any(o.order_line.mapped("sourcing_vendor_line_id"))
+            )[:1]
+            if existing:
+                order = existing
+                order.with_context(skip_sourcing_sync=True).write({
+                    "order_line": [
+                        (0, 0, self._prepare_rfq_line_vals(v, date_order))
+                        for v in rows
+                    ],
+                })
+                updated |= order
+            else:
+                order = PurchaseOrder.create(
+                    self._prepare_rfq_vals(partner, rows, date_order)
+                )
+                created |= order
+            rows.write({"rfq_id": order.id})
+
+        self.message_post(
+            body=_(
+                "%(new)s draft RFQ(s) created, %(upd)s updated.",
+                new=len(created), upd=len(updated),
+            )
+        )
         return self.action_view_purchase_orders()
 
     def action_create_purchase_orders(self):
-        """R06/R07 — confirm the selected RFQs into POs and cancel the losers.
+        """R06/R07 — confirm the winning RFQs into POs and cancel the losers.
 
-        TD-001 RFQ reuse: write the final grid figures onto each selected
-        vendor's existing draft ``rfq_id`` and confirm it; cancel every
-        non-selected draft RFQ on the request. Idempotent via the state guard.
+        TD-001 RFQ reuse with merged RFQs: write each winner's final grid figures
+        onto its own line in the (vendor-merged) ``rfq_id``, drop the lines that did
+        not win (non-selected or qty 0), then confirm RFQs that still have a positive
+        line and cancel the rest — including RFQs left empty by the pruning.
+        Idempotent via the state guard.
         """
         self.ensure_one()
         if self.state not in ("in_sourcing", "selected"):
@@ -333,25 +372,54 @@ class SourcingRequest(models.Model):
                 )
 
         selected_vendors = lines_with_vendors.mapped("vendor_line_ids").filtered("selected")
-        winners = selected_vendors.filtered(lambda v: v.rfq_id and v.rfq_id.state in ("draft", "sent"))
+        # A winner is a selected row with a positive qty and a confirmable RFQ.
+        # A selected row left at qty 0 is not a winner: its merged-RFQ line is
+        # dropped below (the "remove qty-0 lines" rule).
+        winners = selected_vendors.filtered(
+            lambda v: v.qty_to_source > 0 and v.rfq_id and v.rfq_id.state in ("draft", "sent")
+        )
         if not winners:
             raise UserError(
                 _("Selected vendors have no draft RFQ to confirm. Create RFQs first.")
             )
 
-        # Losers are the non-selected candidate RFQs only. Automatic-procurement
-        # POs carry a sourcing_request_id but NO sourcing_vendor_line_id, so they
-        # are excluded here and survive (they must not be cancelled).
-        candidate_rfqs = self.purchase_order_ids.filtered("sourcing_vendor_line_id")
-        losers = (candidate_rfqs - winners.mapped("rfq_id")).filtered(
+        # Candidate RFQs are those with at least one sourcing-linked line. Automatic-
+        # procurement POs carry a sourcing_request_id but NO line-level link, so they
+        # are excluded here and survive (they must not be cancelled). Captured before
+        # any line is pruned so emptied RFQs are still recognised as candidates.
+        candidate_rfqs = self.purchase_order_ids.filtered(
             lambda po: po.state in ("draft", "sent")
+            and any(po.order_line.mapped("sourcing_vendor_line_id"))
         )
 
-        # Push final grid figures onto the winning RFQs, then confirm.
+        # Push final grid figures onto each winning row's line.
         for vendor in winners:
             vendor._apply_to_rfq()
-        winners.mapped("rfq_id").with_context(skip_sourcing_sync=True).button_confirm()
 
+        # On every RFQ a winner points to, drop the candidate lines that did not win
+        # (non-selected or qty 0). Confirm the RFQ if a positive line remains; cancel
+        # it outright if pruning leaves nothing to buy.
+        confirmed = self.env["purchase.order"]
+        for order in winners.mapped("rfq_id"):
+            to_drop = order.order_line.filtered(
+                lambda l: l.sourcing_vendor_line_id
+                and (l.sourcing_vendor_line_id not in winners or l.product_qty <= 0)
+            )
+            if to_drop:
+                order.with_context(skip_sourcing_sync=True).write(
+                    {"order_line": [(2, l.id, 0) for l in to_drop]}
+                )
+            if order.order_line.filtered(lambda l: l.product_qty > 0):
+                confirmed |= order
+
+        if confirmed:
+            confirmed.with_context(skip_sourcing_sync=True).button_confirm()
+
+        # Losers: every candidate RFQ not confirmed — fully-losing RFQs and the ones
+        # pruning left empty.
+        losers = (candidate_rfqs - confirmed).filtered(
+            lambda po: po.state in ("draft", "sent")
+        )
         if losers:
             losers.button_cancel()
 
@@ -359,7 +427,7 @@ class SourcingRequest(models.Model):
         self.message_post(
             body=_(
                 "%(win)s purchase order(s) confirmed, %(lose)s RFQ(s) cancelled.",
-                win=len(winners),
+                win=len(confirmed),
                 lose=len(losers),
             )
         )
@@ -380,32 +448,45 @@ class SourcingRequest(models.Model):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
-    def _prepare_rfq_vals(self, vendor):
-        """Build the create() vals for one draft RFQ from a vendor row (R05)."""
-        self.ensure_one()
+    def _prepare_rfq_line_vals(self, vendor, date_order):
+        """Build one RFQ order-line dict from a candidate-vendor row (R05).
+
+        The line carries its ``sourcing_vendor_line_id`` link so the merged RFQ can
+        be synced and pruned per line.
+        """
         line = vendor.line_id
-        date_order = fields.Datetime.now()
-        # TD-003: date_planned = date_order + delay days
+        # TD-003: date_planned = date_order + this vendor's lead time.
         date_planned = date_order + timedelta(days=vendor.delay or 0)
         return {
-            "partner_id": vendor.partner_id.id,
-            "user_id": (vendor.partner_id.buyer_id or self.env.user).id,
+            "product_id": line.product_id.id,
+            "product_qty": vendor.qty_to_source or line.product_qty,
+            "price_unit": vendor.price,
+            "date_planned": date_planned,
+            "product_uom_id": line.product_id.uom_id.id,
+            "name": line.product_id.display_name,
+            "sourcing_vendor_line_id": vendor.id,
+        }
+
+    def _prepare_rfq_vals(self, partner, rows, date_order):
+        """Build the create() vals for one merged draft RFQ for ``partner`` (R05).
+
+        The header (currency, payment term) is taken from the vendor's first
+        (cheapest) row — D-006 assumes a single currency/term per vendor; rows that
+        differ are not honoured on the shared header (documented trade-off).
+        """
+        self.ensure_one()
+        first = rows[:1]
+        return {
+            "partner_id": partner.id,
+            "user_id": (partner.buyer_id or self.env.user).id,
             "company_id": self.company_id.id,
-            "currency_id": (vendor.currency_id or self.company_id.currency_id).id,
-            "payment_term_id": vendor.payment_term_id.id or False,
+            "currency_id": (first.currency_id or self.company_id.currency_id).id,
+            "payment_term_id": first.payment_term_id.id or False,
             "date_order": date_order,
             "origin": self.name,
             "sourcing_request_id": self.id,
-            "sourcing_vendor_line_id": vendor.id,
             "order_line": [
-                (0, 0, {
-                    "product_id": line.product_id.id,
-                    "product_qty": vendor.qty_to_source or line.product_qty,
-                    "price_unit": vendor.price,
-                    "date_planned": date_planned,
-                    "product_uom_id": line.product_id.uom_id.id,
-                    "name": line.product_id.display_name,
-                }),
+                (0, 0, self._prepare_rfq_line_vals(v, date_order)) for v in rows
             ],
         }
 
@@ -418,9 +499,9 @@ class SourcingRequest(models.Model):
         product's best ``supplierinfo`` (Automatic lines to the same vendor are
         merged into one PO). The buyer confirms the PO manually.
 
-        Auto POs carry ``sourcing_request_id`` for traceability but NO
-        ``sourcing_vendor_line_id`` — they are not candidate RFQs and must never
-        be treated as losers in :meth:`action_create_purchase_orders`.
+        Auto POs carry ``sourcing_request_id`` for traceability but their lines
+        carry NO ``sourcing_vendor_line_id`` — they are not candidate RFQs and must
+        never be treated as losers in :meth:`action_create_purchase_orders`.
         """
         PurchaseOrder = self.env["purchase.order"]
         date_order = fields.Datetime.now()
