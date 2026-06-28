@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+
+    <!-- §6.2 Multi-company record rules -->
+    <record id="sourcing_request_company_rule" model="ir.rule">
+        <field name="name">Sourcing Request: multi-company</field>
+        <field name="model_id" ref="model_sourcing_request"/>
+        <field name="global" eval="True"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="sourcing_request_line_company_rule" model="ir.rule">
+        <field name="name">Sourcing Request Line: multi-company</field>
+        <field name="model_id" ref="model_sourcing_request_line"/>
+        <field name="global" eval="True"/>
+        <field name="domain_force">[('request_id.company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="sourcing_request_line_vendor_company_rule" model="ir.rule">
+        <field name="name">Sourcing Candidate Vendor: multi-company</field>
+        <field name="model_id" ref="model_sourcing_request_line_vendor"/>
+        <field name="global" eval="True"/>
+        <field name="domain_force">[('line_id.request_id.company_id', 'in', company_ids)]</field>
+    </record>
+
+</odoo>

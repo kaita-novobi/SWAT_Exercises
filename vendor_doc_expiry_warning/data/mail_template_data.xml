@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <!--
+        Email template for the weekly vendor document expiration summary.
+        Model: res.company — rendered once per run using the current company as context.
+
+        Editable via: Settings > Technical > Email > Templates
+        Search for: "Vendor Document Expiration Weekly Summary"
+
+        Body variables available to template editors:
+            object.name    — company name (QWeb: t-out="object.name")
+            expiry_table   — HTML table of expiring vendors (injected by the weekly cron
+                             via add_context; QWeb: t-out="expiry_table")
+
+        Do NOT remove the expiry_table block from the body — the cron injects the vendor
+        data there at render time.
+    -->
+    <record id="email_template_vendor_expiry_summary" model="mail.template">
+        <field name="name">Vendor Document Expiration Weekly Summary</field>
+        <field name="model_id" ref="base.model_res_company"/>
+        <field name="subject">Weekly Vendor Document Expiration Summary — ${object.name}</field>
+        <field name="body_html" type="html">
+            <p>Dear Purchase Manager,</p>
+            <p>The following vendors at <strong><t t-out="object.name"></t></strong> have W-9 or COI
+            documents expiring within the next 30 days. Please follow up to ensure
+            renewal before the expiration date.</p>
+            <div t-if="expiry_table"><t t-out="expiry_table"/></div>
+            <p>This is an automated message. Do not reply directly to this email.</p>
+        </field>
+        <field name="auto_delete">False</field>
+    </record>
+</odoo>
