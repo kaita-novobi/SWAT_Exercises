@@ -109,6 +109,27 @@
                                 </list>
                             </field>
                         </page>
+                        <page string="Vendor Comparison" name="vendor_comparison">
+                            <field name="all_vendor_line_ids" widget="sourcing_vendor_matrix" nolabel="1">
+                                <list>
+                                    <field name="line_id"/>
+                                    <field name="product_id"/>
+                                    <field name="product_qty"/>
+                                    <field name="partner_id"/>
+                                    <field name="price"/>
+                                    <field name="delay"/>
+                                    <field name="min_qty"/>
+                                    <field name="currency_id"/>
+                                    <field name="payment_term_id"/>
+                                    <field name="qty_to_source"/>
+                                    <field name="selected"/>
+                                    <field name="selection_reason"/>
+                                    <field name="rfq_id"/>
+                                    <field name="is_best_price"/>
+                                    <field name="is_best_delay"/>
+                                </list>
+                            </field>
+                        </page>
                         <page string="Tracking Change" name="tracking_change">
                             <field name="all_vendor_line_ids" readonly="1">
                                 <list create="false" delete="false"

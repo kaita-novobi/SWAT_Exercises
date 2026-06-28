@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="mvs_sourcing_request.VendorMatrix">
+        <div class="o_vendor_matrix">
+            <div class="o_vm_toolbar">
+                <div class="o_vm_heading">
+                    <span class="o_vm_title">VENDOR COMPARISON · SEEDED FROM PRICELISTS, OVERRIDE IN PLACE</span>
+                    <span class="o_vm_subtitle">edit the figures to match the RFQ replies — best price &amp; lead time are highlighted</span>
+                </div>
+                <div class="o_vm_switch btn-group" role="group">
+                    <button type="button"
+                            class="btn btn-sm"
+                            t-att-class="isGroupByProduct ? 'btn-primary' : 'btn-secondary'"
+                            t-on-click="() => this.setGroupBy('product')">
+                        Group by Product
+                    </button>
+                    <button type="button"
+                            class="btn btn-sm"
+                            t-att-class="!isGroupByProduct ? 'btn-primary' : 'btn-secondary'"
+                            t-on-click="() => this.setGroupBy('vendor')">
+                        Group by Vendor
+                    </button>
+                </div>
+            </div>
+
+            <t t-if="!records.length">
+                <div class="o_vm_empty text-muted">
+                    No candidate vendor yet — vendors appear here once the sourcing request lines are seeded.
+                </div>
+            </t>
+
+            <div t-else="" class="o_vm_scroll">
+                <table class="o_vm_table">
+                    <thead>
+                        <tr>
+                            <th class="o_vm_first" t-esc="isGroupByProduct ? 'VENDOR' : 'PRODUCT'"/>
+                            <th class="o_vm_num">PRICE</th>
+                            <th class="o_vm_num">LEAD (D)</th>
+                            <th class="o_vm_num">MIN QTY</th>
+                            <th>TERMS</th>
+                            <th class="o_vm_num">QTY TO SOURCE</th>
+                            <th>SELECTION REASON</th>
+                            <th class="o_vm_center">RFQ</th>
+                            <th class="o_vm_center">Sel.</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <t t-foreach="groups" t-as="group" t-key="group.key">
+                            <tr class="o_vm_group">
+                                <td colspan="9">
+                                    <span class="o_vm_group_title" t-esc="group.title"/>
+                                    <span class="o_vm_group_meta" t-esc="group.meta"/>
+                                </td>
+                            </tr>
+                            <t t-foreach="group.records" t-as="rec" t-key="rec.id">
+                                <tr class="o_vm_row">
+                                    <td class="o_vm_first">
+                                        <t t-esc="isGroupByProduct ? m2oName(rec.data.partner_id) : m2oName(rec.data.product_id)"/>
+                                    </td>
+                                    <td class="o_vm_num">
+                                        <div t-att-class="rec.data.is_best_price ? 'o_vm_cell o_vm_best_price' : 'o_vm_cell'">
+                                            <input type="number" step="0.01" class="o_vm_input"
+                                                   t-att-value="rec.data.price"
+                                                   t-on-change="(ev) => this.onNumberChange(rec, 'price', ev, 'float')"/>
+                                            <span t-if="rec.data.is_best_price" class="o_vm_tag o_vm_tag_price">BEST PRICE</span>
+                                        </div>
+                                    </td>
+                                    <td class="o_vm_num">
+                                        <div t-att-class="rec.data.is_best_delay ? 'o_vm_cell o_vm_best_delay' : 'o_vm_cell'">
+                                            <input type="number" step="1" class="o_vm_input"
+                                                   t-att-value="rec.data.delay"
+                                                   t-on-change="(ev) => this.onNumberChange(rec, 'delay', ev, 'integer')"/>
+                                            <span t-if="rec.data.is_best_delay" class="o_vm_tag o_vm_tag_delay">FASTEST</span>
+                                        </div>
+                                    </td>
+                                    <td class="o_vm_num">
+                                        <input type="number" step="0.01" class="o_vm_input"
+                                               t-att-value="rec.data.min_qty"
+                                               t-on-change="(ev) => this.onNumberChange(rec, 'min_qty', ev, 'float')"/>
+                                    </td>
+                                    <td>
+                                        <select class="o_vm_input o_vm_select"
+                                                t-on-change="(ev) => this.onTermChange(rec, ev)">
+                                            <option value="" t-att-selected="!m2oId(rec.data.payment_term_id)">—</option>
+                                            <t t-foreach="state.paymentTerms" t-as="term" t-key="term.id">
+                                                <option t-att-value="term.id"
+                                                        t-att-selected="m2oId(rec.data.payment_term_id) === term.id"
+                                                        t-esc="term.display_name"/>
+                                            </t>
+                                        </select>
+                                    </td>
+                                    <td class="o_vm_num">
+                                        <input type="number" step="0.01" class="o_vm_input"
+                                               t-att-value="rec.data.qty_to_source"
+                                               t-on-change="(ev) => this.onNumberChange(rec, 'qty_to_source', ev, 'float')"/>
+                                    </td>
+                                    <td>
+                                        <input type="text" class="o_vm_input"
+                                               placeholder="—"
+                                               t-att-value="rec.data.selection_reason || ''"
+                                               t-on-change="(ev) => this.onTextChange(rec, 'selection_reason', ev)"/>
+                                    </td>
+                                    <td class="o_vm_center">
+                                        <a t-if="m2oId(rec.data.rfq_id)" href="#"
+                                           t-on-click.prevent="() => this.openRfq(rec)"
+                                           t-esc="rfqLabel(rec)"/>
+                                        <span t-else="" class="text-muted">—</span>
+                                    </td>
+                                    <td class="o_vm_center">
+                                        <input type="checkbox"
+                                               t-att-checked="rec.data.selected"
+                                               t-on-change="(ev) => this.onSelectedToggle(rec, ev)"/>
+                                    </td>
+                                </tr>
+                            </t>
+                        </t>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </t>
+
+</templates>

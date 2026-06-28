@@ -22,6 +22,13 @@ class SourcingRequestLineVendor(models.Model):
         "sourcing.request.line", string="Request Line", required=True, index=True,
         ondelete="cascade",
     )
+    # Related read-outs (non-stored) — let the Vendor Comparison matrix render the
+    # product header / group-by-vendor rows without extra ORM reads.
+    product_id = fields.Many2one(related="line_id.product_id", string="Product")
+    product_qty = fields.Float(
+        related="line_id.product_qty", string="Required Qty",
+        digits="Product Unit of Measure",
+    )
     partner_id = fields.Many2one(
         "res.partner", string="Vendor", required=True, index=True, ondelete="restrict",
     )

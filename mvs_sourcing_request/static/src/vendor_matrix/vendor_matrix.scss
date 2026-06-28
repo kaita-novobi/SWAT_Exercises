@@ -1,0 +1,143 @@
+.o_vendor_matrix {
+    --vm-best-price-bg: #e6f4ea;
+    --vm-best-price-fg: #1e7e4f;
+    --vm-best-delay-bg: #e8f1fb;
+    --vm-best-delay-fg: #1c6fb8;
+    --vm-border: #dee2e6;
+
+    font-size: 13px;
+
+    .o_vm_toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+
+    .o_vm_heading {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .o_vm_title {
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        font-size: 12px;
+    }
+
+    .o_vm_subtitle {
+        color: #6c757d;
+        font-size: 12px;
+    }
+
+    .o_vm_empty {
+        padding: 24px 8px;
+    }
+
+    .o_vm_scroll {
+        overflow-x: auto;
+        width: 100%;
+    }
+
+    .o_vm_table {
+        width: 100%;
+        border-collapse: collapse;
+
+        thead th {
+            text-align: left;
+            text-transform: uppercase;
+            font-size: 11px;
+            color: #6c757d;
+            font-weight: 600;
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--vm-border);
+            white-space: nowrap;
+        }
+
+        .o_vm_num { text-align: right; }
+        .o_vm_center { text-align: center; }
+
+        .o_vm_group td {
+            background-color: #f6f8fa;
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--vm-border);
+        }
+
+        .o_vm_group_title {
+            font-weight: 700;
+        }
+
+        .o_vm_group_meta {
+            color: #6c757d;
+            margin-left: 8px;
+            font-size: 12px;
+        }
+
+        .o_vm_row td {
+            padding: 6px 10px;
+            border-bottom: 1px solid #f0f1f3;
+            vertical-align: middle;
+        }
+
+        .o_vm_first {
+            min-width: 160px;
+            font-weight: 500;
+        }
+    }
+
+    .o_vm_input {
+        width: 100%;
+        min-width: 70px;
+        border: 1px solid var(--vm-border);
+        border-radius: 4px;
+        padding: 4px 8px;
+        background: #fff;
+
+        &:focus {
+            outline: none;
+            border-color: #80bdff;
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.15);
+        }
+    }
+
+    input[type="number"].o_vm_input {
+        text-align: right;
+    }
+
+    .o_vm_select {
+        min-width: 100px;
+    }
+
+    // Per-cell highlight wrappers (green best price / blue fastest lead).
+    .o_vm_cell {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 2px;
+        border-radius: 4px;
+        padding: 2px;
+    }
+
+    .o_vm_best_price {
+        background-color: var(--vm-best-price-bg);
+        .o_vm_input { border-color: var(--vm-best-price-fg); font-weight: 700; }
+    }
+
+    .o_vm_best_delay {
+        background-color: var(--vm-best-delay-bg);
+        .o_vm_input { border-color: var(--vm-best-delay-fg); font-weight: 700; }
+    }
+
+    .o_vm_tag {
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+
+    .o_vm_tag_price { color: var(--vm-best-price-fg); }
+    .o_vm_tag_delay { color: var(--vm-best-delay-fg); }
+}
