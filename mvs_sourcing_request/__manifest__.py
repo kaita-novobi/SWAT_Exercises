@@ -27,6 +27,13 @@
         "views/sale_order_views.xml",
         "views/purchase_order_views.xml",
     ],
+    "assets": {
+        "web.assets_backend": [
+            "mvs_sourcing_request/static/src/vendor_matrix/vendor_matrix.scss",
+            "mvs_sourcing_request/static/src/vendor_matrix/vendor_matrix.xml",
+            "mvs_sourcing_request/static/src/vendor_matrix/vendor_matrix.js",
+        ],
+    },
     "installable": True,
     "application": False,
     "auto_install": False,
