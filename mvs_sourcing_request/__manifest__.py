@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     "name": "Sourcing Request & Vendor Comparison",
-    "version": "19.0.1.2.0",
+    "version": "19.0.1.3.0",
     "summary": (
         "Multi-vendor sourcing for sales orders: raise a sourcing request, "
         "route lines automatically or through an assisted RFQ negotiation, "

@@ -16,6 +16,22 @@
                     </div>
                 </button>
             </xpath>
+            <!-- Linked SO (read-only) + payment term promoted to the header. -->
+            <xpath expr="//div[@name='date_planned_div']" position="after">
+                <field name="sale_order_id" readonly="1"
+                       invisible="not sale_order_id"/>
+                <xpath expr="//field[@name='payment_term_id']" position="move"/>
+            </xpath>
+            <!-- Surface the chatter-tracked figures as default-shown columns. -->
+            <xpath expr="//field[@name='order_line']/list/field[@name='product_qty']" position="attributes">
+                <attribute name="optional">show</attribute>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/list/field[@name='price_unit']" position="attributes">
+                <attribute name="optional">show</attribute>
+            </xpath>
+            <xpath expr="//field[@name='order_line']/list/field[@name='date_planned']" position="attributes">
+                <attribute name="optional">show</attribute>
+            </xpath>
         </field>
     </record>
 

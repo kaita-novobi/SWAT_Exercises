@@ -86,6 +86,8 @@
                         <group>
                             <field name="company_id" groups="base.group_multi_company"/>
                             <field name="shipping_date"/>
+                            <field name="is_done"/>
+                            <field name="is_cancelled"/>
                         </group>
                     </group>
                     <group string="Sourcing Summary" col="3">
@@ -100,9 +102,9 @@
                             <field name="line_ids"
                                    readonly="state in ('po_created', 'done', 'cancel')"
                                    context="{'form_view_ref': 'mvs_sourcing_request.view_sourcing_request_line_form'}">
-                                <list>
-                                    <field name="product_id"/>
-                                    <field name="product_qty"/>
+                                <list editable="bottom">
+                                    <field name="product_id" readonly="1"/>
+                                    <field name="product_qty" readonly="1"/>
                                     <field name="routing"/>
                                     <field name="allocated_qty"/>
                                     <field name="is_fully_allocated"/>

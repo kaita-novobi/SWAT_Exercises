@@ -539,3 +539,81 @@ class TestSourcingRequest(TransactionCase):
             vendor.with_user(user_b).search([("id", "=", vendor.id)]),
             "Company-B user must not see Company-A candidate vendor",
         )
+
+    # ==================================================================
+    # Req 1 — sourcing can be raised while the SO is still a quotation
+    # (button widened to draft/sent/sale; the action itself is state-agnostic).
+    # ==================================================================
+    def test_request_sourcing_from_quotation(self):
+        self.assertEqual(self.sale_order.state, "draft", "SO is a quotation")
+        request = self._make_request()
+        self.assertTrue(request, "A request is raised from a draft quotation")
+
+    # ==================================================================
+    # Req 3b — PO carries the linked Sales Order (via sourcing_request_id)
+    # ==================================================================
+    def test_po_linked_sale_order(self):
+        request = self._make_request()
+        request.line_ids.routing = "auto"
+        request.action_start()
+        po = request.purchase_order_ids
+        self.assertEqual(
+            po.sale_order_id, self.sale_order,
+            "PO.sale_order_id follows sourcing_request_id.sale_order_id",
+        )
+
+    # ==================================================================
+    # Req 3c — PO line figure edits are logged to the parent PO chatter,
+    # except automated back-sync writes (skip_sourcing_sync).
+    # ==================================================================
+    def test_pol_change_logged_to_po_chatter(self):
+        request = self._make_request()
+        request.line_ids.routing = "auto"
+        request.action_start()
+        po = request.purchase_order_ids
+        line = po.order_line[0]
+
+        before = len(po.message_ids)
+        line.write({"product_qty": 7.0})
+        self.assertGreater(
+            len(po.message_ids), before, "Qty edit posts to the PO chatter"
+        )
+
+        mid = len(po.message_ids)
+        line.with_context(skip_sourcing_sync=True).write({"price_unit": 42.0})
+        self.assertEqual(
+            len(po.message_ids), mid, "Back-sync writes must not be logged"
+        )
+
+    # ==================================================================
+    # Req 5 — Mark Done / Cancel checkboxes are a UI onto `state`
+    # ==================================================================
+    def test_mark_done_cancel_sync_state(self):
+        request = self._make_request()  # state == draft, no POs, no RFQ
+        self.assertFalse(request.is_done)
+        self.assertFalse(request.is_cancelled)
+
+        request.is_done = True
+        self.assertEqual(request.state, "done")
+        self.assertTrue(request.is_done)
+
+        # Untick reopens to the natural prior state (draft — no POs/RFQs yet).
+        request.is_done = False
+        self.assertEqual(request.state, "draft")
+
+        request.is_cancelled = True
+        self.assertEqual(request.state, "cancel")
+        request.is_cancelled = False
+        self.assertEqual(request.state, "draft")
+
+    def test_mark_done_reopens_to_po_created_when_pos_exist(self):
+        request = self._make_request()
+        request.line_ids.routing = "auto"
+        request.action_start()  # creates a PO, state == in_sourcing
+        self.assertTrue(request.purchase_order_ids)
+
+        request.is_done = True
+        self.assertEqual(request.state, "done")
+        # A PO exists → reopening lands on po_created, not the prior in_sourcing.
+        request.is_done = False
+        self.assertEqual(request.state, "po_created")
